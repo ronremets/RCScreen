@@ -1,0 +1,3 @@
+title=RCScreen
+author=Ron Remets
+orientation=portrait

@@ -1,0 +1,182 @@
+#: kivy 1.10.1
+
+<DynamicButton@Button>:
+    texture_size: self.width / 2, self.height / 2
+
+<DynamicLabel@Label>:
+    texture_size: self.width / 2, self.height / 2
+
+ScreenManager:
+    MainMenuScreen:
+    SettingsScreen:
+    HelpScreen:
+    FeedbackScreen:
+    ConnectScreen:
+    ControllerScreen:
+
+<MainMenuScreen>
+    name: "main"
+    GridLayout:
+        size: root.size
+        rows: 5
+        cols: 1
+        padding:
+            ((self.width / self.cols) * 0.25,
+            (self.height / self.rows) * 0.2)
+        spacing: (self.height / self.rows) * 0.2
+        DynamicLabel:
+            text: "RCScreen"
+        DynamicButton:
+            text: "Connect"
+            on_press:
+                root.manager.transition.direction = "left"
+                app.root.current = "connect"
+        DynamicButton:
+            text: "Settings"
+            on_press:
+                root.manager.transition.direction = "left"
+                app.root.current = "settings"
+        DynamicButton:
+            text: "Help"
+            on_press:
+                root.manager.transition.direction = "left"
+                app.root.current = "help"
+        DynamicButton:
+            text: "Feedback"
+            on_press:
+                root.manager.transition.direction = "left"
+                app.root.current = "feedback"
+
+<HelpScreen>
+    name: "help"
+    GridLayout:
+        size: root.size
+        rows: 2
+        cols: 1
+        padding:
+            ((self.width / self.cols) * 0.25,
+            (self.height / self.rows) * 0.2)
+        spacing: (self.height / self.rows) * 0.2
+    
+        DynamicLabel:
+            text: "help screen"
+        DynamicButton:
+            text: "Back"
+            on_press:
+                root.manager.transition.direction = "right"
+                app.root.current = "main"
+
+<SettingsScreen>
+    name: "settings"
+    GridLayout:
+        size: root.size
+        rows: 2
+        cols: 1
+        padding:
+            ((self.width / self.cols) * 0.25,
+            (self.height / self.rows) * 0.2)
+        spacing: (self.height / self.rows) * 0.2
+    
+        DynamicLabel:
+            text: "settings screen"
+        DynamicButton:
+            text: "Back"
+            on_press:
+                root.manager.transition.direction = "right"
+                app.root.current = "main"
+
+<FeedbackScreen>
+    name: "feedback"
+    GridLayout:
+        size: root.size
+        rows: 5
+        cols: 2
+        padding:
+            ((self.width / self.cols) * 0.25,
+            (self.height / self.rows) * 0.2)
+        spacing: (self.height / self.rows) * 0.2
+    
+        DynamicButton:
+            text: "Back"
+            on_press:
+                root.manager.transition.direction = "right"
+                app.root.current = "main"
+        Label:
+        DynamicLabel:
+            text: "Enter Email:"
+        TextInput:
+        DynamicLabel:
+        	text: "Enter subject:"
+        TextInput:
+        DynamicLabel:
+        	text: "Enter description:"
+        TextInput:
+        Label:
+        DynamicButton:
+        	text: "Submit"
+
+<ErrorPopup>:
+    GridLayout:
+        size: root.size
+        pos: root.pos
+        rows: 3
+        cols: 2
+        padding:
+            ((self.width / self.cols) * 0.25,
+            (self.height / self.rows) * 0.2)
+        spacing: (self.height / self.rows) * 0.2
+    
+        DynamicLabel:
+            text: "error popup"
+        DynamicButton:
+            text: "Back"
+            on_press:
+                self.text = "pressed"
+
+<ConnectScreen>:
+    name: "connect"
+    GridLayout:
+        size: root.size
+        pos: root.pos
+        rows: 3
+        cols: 2
+        padding:
+            ((self.width / self.cols) * 0.25,
+            (self.height / self.rows) * 0.2)
+        spacing: (self.height / self.rows) * 0.2
+    
+        DynamicLabel:
+            text: "Your code:"
+        DynamicLabel:
+        	text: "test_code"
+
+        DynamicLabel:
+            text: "Enter code:"
+
+        TextInput:
+
+        DynamicButton:
+            text: "Connect"
+            on_press:
+                root.manager.transition.direction = "left"
+                app.root.current = "controller"
+        DynamicButton:
+            text: "Back"
+            on_press:
+            	root.manager.transition.direction = "right"
+                app.root.current = "main"
+
+<ControllerScreen>
+    name: "controller"
+    Video:
+    	size: root.size
+    	source: "screen.jpg"
+    DynamicButton:
+    	background_color: 1, 1, 1, 0.5
+    	size: root.height / 10, root.height / 10
+    	size_hint: None, None
+    	pos: 0, root.height - self.height
+    	text: "Back"
+    	on_press:
+    		root.manager.transition.direction = "right"
+    		app.root.current = "connect"
