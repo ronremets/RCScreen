@@ -1,4 +1,10 @@
 """
+
+
+THIS MODULE IS DEPRECATED! USE communication_protocol INSTEAD!!!
+
+
+
 Handles the communication to the server and the other client.
 """
 
@@ -165,12 +171,12 @@ class Server(object):
             packet = self.recv()
         return packet
 
-    def connect(self):
+    def connect(self, timeout=TIMEOUT):
         """
         Connect to client and open threads for read and write.
         """
         self._socket = socket.socket()
-        self._socket.settimeout(TIMEOUT)
+        self._socket.settimeout(timeout)
         self.update_recv_buffer_thread = threading.Thread(
             target=self._update_recv_buffer)
         self.update_send_buffer_thread = threading.Thread(
