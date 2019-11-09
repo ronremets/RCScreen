@@ -1,15 +1,17 @@
 """
 Handles communication between the clients and the server
+TODO: Add exception handling.
 """
 
 __author__ = "Ron Remets"
 
-import time
 import socket
 import threading
 
 import communication_protocol
+from client import Client  # TODO: change client module shadowing.
 
+# TODO: Add a DNS request instead of static IP and port.
 SERVER_ADDRESS = ("127.0.0.1", 4567)
 TIMEOUT = 2
 
@@ -28,9 +30,11 @@ class Server(object):
         self._clients_threads_lock = threading.Lock()
         self._set_running(False)
 
-    # noinspection PyMissingOrEmptyDocstring
     @property
     def running(self):
+        """
+        :return: If the server is running.
+        """
         with self._running_lock:
             return self.__running
 
@@ -39,15 +43,20 @@ class Server(object):
             self.__running = value
 
     # noinspection PyMethodMayBeStatic
-    def _connect_client(self, client):
+    def _connect_client(self, client_socket):
         """
         Connect a client to another client.
-        :param client: The client to connect.
+        :param client_socket: The client to connect.
         """
-        communication_protocol.send_message(client,
-                                            {"content": b"Hello world"})
-        print(communication_protocol.recv_packet(client))
-        client.close()  # TODO: Remove this.
+        #  TODO: Create a better protocol and maybe store
+        #   in communication_protocol
+        code = b"12345"
+        other_code = communication_protocol.recv_packet(client_socket)
+        communication_protocol.send_message(client_socket,
+                                            {"content": b"code: " + code})
+        client = Client(client_socket, code, other_code)
+        print(repr(client))
+        client.close()
 
     def _add_clients(self):
         """
@@ -56,6 +65,7 @@ class Server(object):
         while self.running:
             try:
                 client, addr = self._server_socket.accept()
+                # TODO: Remove and replace with logging.
                 print(f"New client: {addr}")
                 client_thread = threading.Thread(target=self._connect_client,
                                                  args=(client,))
@@ -109,15 +119,17 @@ class Server(object):
         self._server_socket.close()
 
 
-a = Server()
-print("starting")
-a.start()
-print("started")
-c = socket.socket()
-c.connect(SERVER_ADDRESS)
-print("connected")
-print(communication_protocol.recv_packet(c))
-print("sending")
-communication_protocol.send_message(c, {"content": b"Hello world2"})
-# time.sleep(5)
-a.close()
+if __name__ == "__main__":
+    # TODO: Fix and create a unit test of this.
+    a = Server()
+    print("starting")
+    a.start()
+    print("started")
+    c = socket.socket()
+    c.connect(SERVER_ADDRESS)
+    print("connected")
+    print(communication_protocol.recv_packet(c))
+    print("sending")
+    communication_protocol.send_message(c, {"content": b"Hello world2"})
+    # time.sleep(5)
+    a.close()

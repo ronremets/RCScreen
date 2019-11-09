@@ -106,14 +106,14 @@ ScreenManager:
             text: "Enter Email:"
         TextInput:
         DynamicLabel:
-        	text: "Enter subject:"
+            text: "Enter subject:"
         TextInput:
         DynamicLabel:
-        	text: "Enter description:"
+            text: "Enter description:"
         TextInput:
         Label:
         DynamicButton:
-        	text: "Submit"
+            text: "Submit"
 
 <ErrorPopup>:
     GridLayout:
@@ -148,7 +148,7 @@ ScreenManager:
         DynamicLabel:
             text: "Your code:"
         DynamicLabel:
-        	text: "test_code"
+            text: "test_code"
 
         DynamicLabel:
             text: "Enter code:"
@@ -163,21 +163,21 @@ ScreenManager:
         DynamicButton:
             text: "Back"
             on_press:
-            	root.manager.transition.direction = "right"
+                root.manager.transition.direction = "right"
                 app.root.current = "main"
 
 <ControllerScreen>
     name: "controller"
     on_enter: pass
     Image:
-    	size: root.size
-    	source: "screen.jpg"
+        size: root.size
+        source: "screen.jpg"
     DynamicButton:
-    	background_color: 1, 1, 1, 0.5
-    	size: root.height / 10, root.height / 10
-    	size_hint: None, None
-    	pos: 0, root.height - self.height
-    	text: "Back"
-    	on_press:
-    		root.manager.transition.direction = "right"
-    		app.root.current = "connect"
+        background_color: 1, 1, 1, 0.5
+        size: root.height / 10, root.height / 10
+        size_hint: None, None
+        pos: 0, root.height - self.height
+        text: "Back"
+        on_press:
+            root.manager.transition.direction = "right"
+            app.root.current = "connect"
