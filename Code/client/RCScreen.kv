@@ -167,9 +167,11 @@ ScreenManager:
                 app.root.current = "main"
 
 <ControllerScreen>
+    screen: screen_image
     name: "controller"
     on_enter: pass
     Image:
+        id: screen_image
         size: root.size
         source: "screen.jpg"
     DynamicButton:

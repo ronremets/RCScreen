@@ -7,7 +7,7 @@
       <sourceFolder url="file://$MODULE_DIR$/Code/mediator" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/Code/client" isTestSource="false" />
     </content>
-    <orderEntry type="inheritedJdk" />
+    <orderEntry type="jdk" jdkName="Python 3.7" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="TestRunnerService">

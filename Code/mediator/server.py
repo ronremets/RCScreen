@@ -7,13 +7,22 @@ __author__ = "Ron Remets"
 
 import socket
 import threading
+import time
+
+some_lock = threading.Lock()
+bob = print
+def f(*args, **kwargs):
+    with some_lock:
+        bob(*args, **kwargs)
+print = f
 
 import communication_protocol
-from client import Client  # TODO: change client module shadowing.
+import client
 
 # TODO: Add a DNS request instead of static IP and port.
 SERVER_ADDRESS = ("127.0.0.1", 4567)
 TIMEOUT = 2
+ENCODING = "ASCII"
 
 
 class Server(object):
@@ -27,6 +36,7 @@ class Server(object):
         self._connect_thread = None
         self._remove_closed_threads_thread = None
         self._running_lock = threading.Lock()
+        self._connected_clients_lock = threading.Lock()
         self._clients_threads_lock = threading.Lock()
         self._set_running(False)
 
@@ -43,20 +53,40 @@ class Server(object):
             self.__running = value
 
     # noinspection PyMethodMayBeStatic
+    def _generate_code(self):
+        """
+        Generate the code for the client
+        :return: The code
+        """
+        with self._connected_clients_lock:
+            return str(len(self._connected_clients)).encode(ENCODING)
+
     def _connect_client(self, client_socket):
         """
-        Connect a client to another client.
+        Log in or sign up a client.
+        :param client_socket: The socket of the client.
+        :return: A client.Client object with the client's information.
+        """
+        code = self._generate_code()
+        other_code = communication_protocol.recv_packet(client_socket)
+        communication_protocol.send_message(client_socket,
+                                            {"content": b"code: " + code})
+        return client.Client(client_socket, code, other_code)
+
+    # noinspection PyMethodMayBeStatic
+    def _run_client(self, client_socket):
+        """
+        Run a client.
         :param client_socket: The client to connect.
         """
         #  TODO: Create a better protocol and maybe store
         #   in communication_protocol
-        code = b"12345"
-        other_code = communication_protocol.recv_packet(client_socket)
-        communication_protocol.send_message(client_socket,
-                                            {"content": b"code: " + code})
-        client = Client(client_socket, code, other_code)
-        print(repr(client))
-        client.close()
+        client_object = self._connect_client(client_socket)
+        with self._connected_clients_lock:
+            self._connected_clients.append(client_object)
+        print(repr(client_object))
+        print(self._connected_clients)
+        client_object.close()
 
     def _add_clients(self):
         """
@@ -64,11 +94,11 @@ class Server(object):
         """
         while self.running:
             try:
-                client, addr = self._server_socket.accept()
+                client_socket, addr = self._server_socket.accept()
                 # TODO: Remove and replace with logging.
                 print(f"New client: {addr}")
-                client_thread = threading.Thread(target=self._connect_client,
-                                                 args=(client,))
+                client_thread = threading.Thread(target=self._run_client,
+                                                 args=(client_socket,))
                 with self._clients_threads_lock:
                     self._clients_threads.append(client_thread)
                     client_thread.start()
@@ -119,17 +149,29 @@ class Server(object):
         self._server_socket.close()
 
 
-if __name__ == "__main__":
-    # TODO: Fix and create a unit test of this.
-    a = Server()
-    print("starting")
-    a.start()
-    print("started")
+def test():
     c = socket.socket()
     c.connect(SERVER_ADDRESS)
     print("connected")
+    communication_protocol.send_message(c, {"content": b"2"})
+    print("sent")
     print(communication_protocol.recv_packet(c))
-    print("sending")
-    communication_protocol.send_message(c, {"content": b"Hello world2"})
-    # time.sleep(5)
+    # time.sleep(2)
+    c.close()
+
+
+if __name__ == "__main__":
+    # TODO: Fix and create a unit test of this.
+    a = Server()
+    threads = []
+    for i in range(10):
+        threads.append(threading.Thread(target=test))
+    print("starting")
+    a.start()
+    for thread in threads:
+        thread.start()
+    print("started")
+    input()
     a.close()
+    for thread in threads:
+        thread.join()
