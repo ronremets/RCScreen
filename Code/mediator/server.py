@@ -20,7 +20,7 @@ import communication_protocol
 import client
 
 # TODO: Add a DNS request instead of static IP and port.
-SERVER_ADDRESS = ("127.0.0.1", 4567)
+SERVER_ADDRESS = ("0.0.0.0", 2125)
 TIMEOUT = 2
 ENCODING = "ASCII"
 
@@ -31,6 +31,7 @@ class Server(object):
     """
     def __init__(self):
         self._server_socket = None
+        self._messages_list = []
         self._connected_clients = []
         self._clients_threads = []
         self._connect_thread = None
@@ -68,12 +69,23 @@ class Server(object):
         :return: A client.Client object with the client's information.
         """
         code = self._generate_code()
-        other_code = communication_protocol.recv_packet(client_socket)
         communication_protocol.send_message(client_socket,
                                             {"content": b"code: " + code})
-        return client.Client(client_socket, code, other_code)
+        other_code = communication_protocol.recv_packet(client_socket)
+        client_object = client.Client(client_socket, code, other_code)
+        print(repr(client_object))
+        with self._connected_clients_lock:
+            self._connected_clients.append(client_object)
+        connected = False
+        while not connected:
+            with self._connected_clients_lock:
+                for other_client in self._connected_clients:
+                    if other_client.code == other_code:
+                        connected = True
+                        client_object.other_client = other_client
+        print("done")
+        return client_object
 
-    # noinspection PyMethodMayBeStatic
     def _run_client(self, client_socket):
         """
         Run a client.
@@ -82,11 +94,8 @@ class Server(object):
         #  TODO: Create a better protocol and maybe store
         #   in communication_protocol
         client_object = self._connect_client(client_socket)
-        with self._connected_clients_lock:
-            self._connected_clients.append(client_object)
-        print(repr(client_object))
-        print(self._connected_clients)
-        client_object.close()
+        # print(self._connected_clients)
+        # TODO: delete this
 
     def _add_clients(self):
         """
@@ -162,7 +171,7 @@ def test():
 
 if __name__ == "__main__":
     # TODO: Fix and create a unit test of this.
-    a = Server()
+    """a = Server()
     threads = []
     for i in range(10):
         threads.append(threading.Thread(target=test))
@@ -174,4 +183,8 @@ if __name__ == "__main__":
     input()
     a.close()
     for thread in threads:
-        thread.join()
+        thread.join()"""
+    a = Server()
+    a.start()
+    input()
+    a.close()

@@ -4,7 +4,7 @@ The protocol used for the socket communication.
 
 __author__ = "Ron Remets"
 
-MESSAGE_PREFIX_LENGTH = 5  # The length of the prefix of the data.
+MESSAGE_PREFIX_LENGTH = 100  # The length of the prefix of the data.
 BUFFER_SIZE = 1024  # The buffer size used when receiving and sending.
 ENCODING = "ASCII"  # The encoding used in the protocol.
 
@@ -61,6 +61,7 @@ def send_message(socket, message):
     :param socket: The socket to receive with.
     :param message: The message to send in dictionary with bytes.
     """
+    print(message)
     packet = (
         f"{len(message['content'])}".zfill(
             MESSAGE_PREFIX_LENGTH).encode(ENCODING)

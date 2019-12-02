@@ -6,7 +6,7 @@
 <DynamicLabel@Label>:
     texture_size: self.width / 2, self.height / 2
 
-ScreenManager:
+WindowManager:
     MainMenuScreen:
     SettingsScreen:
     HelpScreen:
@@ -135,10 +135,12 @@ ScreenManager:
 
 <ConnectScreen>:
     name: "connect"
+    controller_checkbox: controller_checkbox
+    other_code_text_input: other_code_text_input
     GridLayout:
         size: root.size
         pos: root.pos
-        rows: 3
+        rows: 4
         cols: 2
         padding:
             ((self.width / self.cols) * 0.25,
@@ -146,18 +148,22 @@ ScreenManager:
         spacing: (self.height / self.rows) * 0.2
     
         DynamicLabel:
-            text: "Your code:"
+            text: "Your code: "
         DynamicLabel:
-            text: "test_code"
+            text: root.manager.code
 
         DynamicLabel:
             text: "Enter code:"
 
         TextInput:
+            id: other_code_text_input
+            text: "0"
 
         DynamicButton:
             text: "Connect"
             on_press:
+                root.manager.other_code = root.other_code_text_input.text
+                root.manager.is_controller = root.controller_checkbox.active
                 root.manager.transition.direction = "left"
                 app.root.current = "controller"
         DynamicButton:
@@ -165,15 +171,22 @@ ScreenManager:
             on_press:
                 root.manager.transition.direction = "right"
                 app.root.current = "main"
+        DynamicLabel:
+            text: "Controller:"
+        CheckBox:
+            id: controller_checkbox
 
 <ControllerScreen>
     screen: screen_image
     name: "controller"
-    on_enter: pass
+    on_enter:
+        self.is_controller = root.manager.is_controller
+        self.code = root.manager.code
+        self.other_code = root.manager.other_code
     Image:
         id: screen_image
         size: root.size
-        source: "screen.jpg"
+        source: ""
     DynamicButton:
         background_color: 1, 1, 1, 0.5
         size: root.height / 10, root.height / 10
