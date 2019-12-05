@@ -41,6 +41,11 @@ class ControllerScreen(Screen):
         self._running = False
         self._running_lock = threading.Lock()
 
+        self._input = None
+        self._input_lock = threading.Lock()
+        self._output = None
+        self._output_lock = threading.Lock()
+
     @property
     def running(self):
         with self._running_lock:
@@ -53,45 +58,58 @@ class ControllerScreen(Screen):
 
     def _recv_packets(self):
         while self.running:
-            try:
-                self._recv_packet_queue.put(
-                    communication_protocol.recv_packet(self._socket))
-            except queue.Full:
-                pass
+            #try:
+            #    self._recv_packet_queue.put(
+            #        communication_protocol.recv_packet(self._socket))
+            #except queue.Full:
+            #    pass
+            current_input = communication_protocol.recv_packet(self._socket)
+            with self._input_lock:
+                self._input = current_input
 
     def _send_messages(self):
         while self._running:
-            try:
+            #try:
+            #    communication_protocol.send_message(
+            #        self._socket,
+            #        self._packet_to_send_queue.get())
+            #except queue.Empty:
+            #    pass
+            with self._output_lock:
+                output = self._output
+            if output is not None:
                 communication_protocol.send_message(
                     self._socket,
-                    self._packet_to_send_queue.get())
-            except queue.Empty:
-                pass
+                    output)
 
     def _update_screen(self, *args):
         """
         Update the screen.
         """
         if self.is_controller:
-            try:
-                image_bytes = self._recv_packet_queue.get()
+            #try:
+            with self._input_lock:
+                image_bytes = self._input#self._recv_packet_queue.get()
+            if image_bytes is not None:
                 image_data = io.BytesIO(image_bytes)
                 image_data.seek(0)
                 texture = CoreImage(image_data, ext="png").texture
                 self.screen.texture = texture
                 self.screen.reload()
-            except queue.Empty:
-                pass
+        #except queue.Empty:
+            #    pass
         else:
             image = PIL.ImageGrab.grab()
             image_data = io.BytesIO()
             image.save(image_data, "png")
             image_data.seek(0)
             data = image_data.read()
-            try:
-                self._packet_to_send_queue.put({"content": data})
-            except queue.Full:
-                pass
+            #try:
+            #    self._packet_to_send_queue.put({"content": data})
+            #except queue.Full:
+            #    pass
+            with self._output_lock:
+                self._output = {"content": data}
 
     def on_enter(self, *args):
         """
@@ -102,14 +120,18 @@ class ControllerScreen(Screen):
         self._send_thread = threading.Thread(target=self._send_messages)
         self._socket = socket.socket()
         self._socket.connect(SERVER_ADDRESS)
-        self.code = communication_protocol.recv_packet(
-            self._socket).decode(communication_protocol.ENCODING)
         communication_protocol.send_message(
-            self._socket, {"content": self.other_code.encode("ASCII")})
-        self._screen_update_event = Clock.schedule_interval(
-            self._update_screen, 0)
+            self._socket,
+            {"content": f"{self.code}\n{self.other_code}".encode(
+                communication_protocol.ENCODING)})
+        # This suck change this
+        # is bad dont it you have so much to live for
+        # injection is inevitable (sql injection)
+        self.running = True
         self._send_thread.start()
         self._recv_thread.start()
+        self._screen_update_event = Clock.schedule_interval(
+            self._update_screen, 0)
 
     def on_leave(self, *args):
         """

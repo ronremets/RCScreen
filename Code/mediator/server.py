@@ -68,10 +68,13 @@ class Server(object):
         :param client_socket: The socket of the client.
         :return: A client.Client object with the client's information.
         """
-        code = self._generate_code()
-        communication_protocol.send_message(client_socket,
-                                            {"content": b"code: " + code})
-        other_code = communication_protocol.recv_packet(client_socket)
+        # code = self._generate_code()
+        # communication_protocol.send_message(client_socket,
+        #                                    {"content": b"code: " + code})
+        message = communication_protocol.recv_packet(client_socket).decode(
+            communication_protocol.ENCODING)
+        code = message[:message.index("\n")]
+        other_code = message[message.index("\n") + 1:]
         client_object = client.Client(client_socket, code, other_code)
         print(repr(client_object))
         with self._connected_clients_lock:

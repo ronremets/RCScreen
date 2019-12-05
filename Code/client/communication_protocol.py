@@ -4,7 +4,7 @@ The protocol used for the socket communication.
 
 __author__ = "Ron Remets"
 
-MESSAGE_PREFIX_LENGTH = 100  # The length of the prefix of the data.
+MESSAGE_PREFIX_LENGTH = 16  # The length of the prefix of the data.
 BUFFER_SIZE = 1024  # The buffer size used when receiving and sending.
 ENCODING = "ASCII"  # The encoding used in the protocol.
 

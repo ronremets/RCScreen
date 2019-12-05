@@ -137,6 +137,7 @@ WindowManager:
     name: "connect"
     controller_checkbox: controller_checkbox
     other_code_text_input: other_code_text_input
+    code_text_input: code_text_input
     GridLayout:
         size: root.size
         pos: root.pos
@@ -149,19 +150,21 @@ WindowManager:
     
         DynamicLabel:
             text: "Your code: "
-        DynamicLabel:
-            text: root.manager.code
+        TextInput:
+            id: code_text_input
+            text: "0"
 
         DynamicLabel:
             text: "Enter code:"
 
         TextInput:
             id: other_code_text_input
-            text: "0"
+            text: "1"
 
         DynamicButton:
             text: "Connect"
             on_press:
+                root.manager.code = root.code_text_input.text
                 root.manager.other_code = root.other_code_text_input.text
                 root.manager.is_controller = root.controller_checkbox.active
                 root.manager.transition.direction = "left"
