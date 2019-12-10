@@ -31,14 +31,11 @@ class Server(object):
     """
     def __init__(self):
         self._server_socket = None
-        self._messages_list = []
-        self._connected_clients = []
-        self._clients_threads = []
-        self._connect_thread = None
-        self._remove_closed_threads_thread = None
+        self._connected_clients = None
+        self._connect_clients_thread = None
+        self._remove_closed_clients_thread = None
         self._running_lock = threading.Lock()
         self._connected_clients_lock = threading.Lock()
-        self._clients_threads_lock = threading.Lock()
         self._set_running(False)
 
     @property
@@ -53,52 +50,26 @@ class Server(object):
         with self._running_lock:
             self.__running = value
 
-    # noinspection PyMethodMayBeStatic
-    def _generate_code(self):
-        """
-        Generate the code for the client
-        :return: The code
-        """
-        with self._connected_clients_lock:
-            return str(len(self._connected_clients)).encode(ENCODING)
-
     def _connect_client(self, client_socket):
         """
         Log in or sign up a client.
         :param client_socket: The socket of the client.
         :return: A client.Client object with the client's information.
         """
-        # code = self._generate_code()
-        # communication_protocol.send_message(client_socket,
-        #                                    {"content": b"code: " + code})
         message = communication_protocol.recv_packet(client_socket).decode(
             communication_protocol.ENCODING)
         code = message[:message.index("\n")]
         other_code = message[message.index("\n") + 1:]
         client_object = client.Client(client_socket, code, other_code)
-        print(repr(client_object))
         with self._connected_clients_lock:
-            self._connected_clients.append(client_object)
+            self._connected_clients[code] = client_object
         connected = False
-        while not connected:
+        while not connected and self.running:
             with self._connected_clients_lock:
-                for other_client in self._connected_clients:
-                    if other_client.code == other_code:
-                        connected = True
-                        client_object.other_client = other_client
-        print("done")
-        return client_object
-
-    def _run_client(self, client_socket):
-        """
-        Run a client.
-        :param client_socket: The client to connect.
-        """
-        #  TODO: Create a better protocol and maybe store
-        #   in communication_protocol
-        client_object = self._connect_client(client_socket)
-        # print(self._connected_clients)
-        # TODO: delete this
+                if other_code in self._connected_clients:
+                    connected = True
+                    client_object.other_client = self._connected_clients[
+                        other_code]
 
     def _add_clients(self):
         """
@@ -109,39 +80,42 @@ class Server(object):
                 client_socket, addr = self._server_socket.accept()
                 # TODO: Remove and replace with logging.
                 print(f"New client: {addr}")
-                client_thread = threading.Thread(target=self._run_client,
-                                                 args=(client_socket,))
-                with self._clients_threads_lock:
-                    self._clients_threads.append(client_thread)
-                    client_thread.start()
+                threading.Thread(
+                    target=self._connect_client,
+                    args=(client_socket,)).start()
             except socket.timeout:
                 pass
 
-    def _remove_closed_threads(self):
+    def _remove_closed_clients(self):
         """
-        Remove closed threads from the list of threads until server closes.
+        Remove closed clients from the list of clients until server
+         closes.
         """
         while self.running:
-            # Create a shallow copy of the list because of the for loop.
-            with self._clients_threads_lock:
-                for thread in self._clients_threads[:]:
-                    if not thread.is_alive():
-                        self._clients_threads.remove(thread)
+            with self._connected_clients_lock:
+                # Create a shallow copy of the list because of the
+                # for loop.
+                for code, client_object in self._connected_clients.copy(
+                        ).items():
+                    if not client_object.running:
+                        self._connected_clients.pop(client_object)
 
     def start(self):
         """
         Start the server.
         """
+        self._connected_clients = {}
         self._server_socket = socket.socket()
         self._server_socket.settimeout(TIMEOUT)
         self._server_socket.bind(SERVER_ADDRESS)
         self._server_socket.listen()  # TODO: Add parameter here.
-        self._connect_thread = threading.Thread(target=self._add_clients)
-        self._remove_closed_threads_thread = threading.Thread(
-            target=self._remove_closed_threads)
+        self._connect_clients_thread = threading.Thread(
+            target=self._add_clients)
+        self._remove_closed_clients_thread = threading.Thread(
+            target=self._remove_closed_clients)
         self._set_running(True)
-        self._connect_thread.start()
-        self._remove_closed_threads_thread.start()
+        self._connect_clients_thread.start()
+        self._remove_closed_clients_thread.start()
 
     def close(self, block=True):
         """

@@ -4,6 +4,8 @@ The protocol used for the socket communication.
 
 __author__ = "Ron Remets"
 
+import base64
+
 MESSAGE_PREFIX_LENGTH = 16  # The length of the prefix of the data.
 BUFFER_SIZE = 1024  # The buffer size used when receiving and sending.
 ENCODING = "ASCII"  # The encoding used in the protocol.
@@ -11,6 +13,7 @@ ENCODING = "ASCII"  # The encoding used in the protocol.
 
 def _recv_fixed_length_data(socket, length):
     """
+    TODO: make it variable length!!!!
     Receives a fixed length packet from a socket.
     :param socket: The socket to receive with.
     :param length: The length of the packet.
@@ -37,7 +40,8 @@ def recv_packet(socket):
     """
     length = int(_recv_fixed_length_data(socket, MESSAGE_PREFIX_LENGTH))
     packet = _recv_fixed_length_data(socket, length)
-    return packet
+    content = base64.b64decode(packet)
+    return content
 
 
 def _send_raw_data(socket, data):
@@ -61,9 +65,10 @@ def send_message(socket, message):
     :param socket: The socket to receive with.
     :param message: The message to send in dictionary with bytes.
     """
-    print(message)
+    content = base64.b64encode(message["content"])
+    print(content)
     packet = (
-        f"{len(message['content'])}".zfill(
+        f"{len(content)}".zfill(
             MESSAGE_PREFIX_LENGTH).encode(ENCODING)
-        + message['content'])
+        + content)
     _send_raw_data(socket, packet)
