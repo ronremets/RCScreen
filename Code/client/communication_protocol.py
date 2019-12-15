@@ -4,7 +4,7 @@ The protocol used for the socket communication.
 
 __author__ = "Ron Remets"
 
-import base64
+import lz4.frame
 
 MESSAGE_PREFIX_LENGTH = 16  # The length of the prefix of the data.
 BUFFER_SIZE = 1024  # The buffer size used when receiving and sending.
@@ -40,7 +40,7 @@ def recv_packet(socket):
     """
     length = int(_recv_fixed_length_data(socket, MESSAGE_PREFIX_LENGTH))
     packet = _recv_fixed_length_data(socket, length)
-    content = base64.b64decode(packet)
+    content = lz4.frame.decompress(packet)
     return content
 
 
@@ -65,8 +65,9 @@ def send_message(socket, message):
     :param socket: The socket to receive with.
     :param message: The message to send in dictionary with bytes.
     """
-    content = base64.b64encode(message["content"])
-    print(content)
+    print("before:", str(len(message["content"])))
+    content = lz4.frame.compress(message["content"])
+    print("Len after is:", str(len(content)))
     packet = (
         f"{len(content)}".zfill(
             MESSAGE_PREFIX_LENGTH).encode(ENCODING)

@@ -18,7 +18,7 @@ class Client(object):
         self._socket = socket
         self.__code = code
         self.__other_code = other_code
-        self._message_queue = queue.SimpleQueue()
+        self._message_queue = queue.Queue(maxsize=1)
         self._send_thread = threading.Thread(
             target=self._send_messages_to_client)
         self._recv_thread = threading.Thread(
@@ -102,7 +102,7 @@ class Client(object):
         return (f"socket: {self._socket}\n"
                 f"code: {self.code}\n"
                 f"other_code: {self.other_code}"
-                f"other_client: {self.other_client}")
+                f"other_client: {type(self.other_client)}")
 
     def close(self, kill=True):
         """

@@ -8,6 +8,7 @@ import io
 import threading
 
 import PIL.ImageGrab
+#from mss import mss
 
 
 class ScreenRecorder(object):
@@ -46,10 +47,20 @@ class ScreenRecorder(object):
         """
         while self.running:
             frame = PIL.ImageGrab.grab()
+            # print(frame.size)
+            #frame = frame.resize((240, 140))
+            #with mss() as screen_shooter:
+            #    frame = screen_shooter.grab(screen_shooter.monitors[0])
             frame_bytes = io.BytesIO()
             frame.save(frame_bytes, "png")
             frame_bytes.seek(0)
             self._set_frame(frame_bytes.read())
+            #self._set_frame(PIL.Image.frombytes(
+            #   'RGB',
+            #   frame.size,
+            #   frame.bgra,
+            #   'raw',
+            #   'BGRX').tobytes())
 
     def start(self):
         """

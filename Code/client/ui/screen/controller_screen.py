@@ -34,19 +34,24 @@ class ControllerScreen(Screen):
         Update the screen.
         """
         if self.is_controller:
-            image_bytes = self._socket.input
+            image_bytes = self._socket.data_received
             # It's None until other_client connects
             if image_bytes is not None:
                 image_data = io.BytesIO(image_bytes)
                 image_data.seek(0)
-                texture = CoreImage(image_data, ext="png").texture
-                self.screen.texture = texture
+                #image = PIL.Image.frombytes(
+                #    'RGB',
+                #    len(image_bytes),
+                #    image_bytes,
+                #    'raw',
+                #    'BGRX')
+                self.screen.texture = CoreImage(image_data, ext="png").texture
                 self.screen.reload()
         else:
             frame = self._screen_recorder.frame
             # It's None until other_client connects
             if frame is not None:
-                self._socket.output = {"content": frame}
+                self._socket.data_to_send = {"content": frame}
 
     def on_enter(self, *args):
         """
@@ -63,5 +68,5 @@ class ControllerScreen(Screen):
         When this screen stops, wait for screen to stop.
         """
         self._screen_update_event.cancel()
-        self._socket.close(kill=True) # TODO: change kill to False
+        self._socket.close(kill=True)  # TODO: change kill to False
         self._screen_recorder.close()

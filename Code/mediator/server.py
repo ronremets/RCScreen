@@ -9,20 +9,12 @@ import socket
 import threading
 import time
 
-some_lock = threading.Lock()
-bob = print
-def f(*args, **kwargs):
-    with some_lock:
-        bob(*args, **kwargs)
-print = f
-
 import communication_protocol
 import client
 
 # TODO: Add a DNS request instead of static IP and port.
 SERVER_ADDRESS = ("0.0.0.0", 2125)
 TIMEOUT = 2
-ENCODING = "ASCII"
 
 
 class Server(object):
@@ -63,6 +55,7 @@ class Server(object):
         client_object = client.Client(client_socket, code, other_code)
         with self._connected_clients_lock:
             self._connected_clients[code] = client_object
+        print(client_object)
         connected = False
         while not connected and self.running:
             with self._connected_clients_lock:
@@ -70,6 +63,7 @@ class Server(object):
                     connected = True
                     client_object.other_client = self._connected_clients[
                         other_code]
+        print("done connecting")
 
     def _add_clients(self):
         """
@@ -125,25 +119,11 @@ class Server(object):
         """
         self._set_running(False)
         if block:
-            self._connect_thread.join()
-            self._remove_closed_threads_thread.join()
-            for thread in self._clients_threads:
-                thread.join()
-            self._remove_closed_threads()
+            self._connect_clients_thread.join()
+            self._remove_closed_clients_thread.join()
         # TODO: Make sure all clients are closed before calling close
         #  on server socket
         self._server_socket.close()
-
-
-def test():
-    c = socket.socket()
-    c.connect(SERVER_ADDRESS)
-    print("connected")
-    communication_protocol.send_message(c, {"content": b"2"})
-    print("sent")
-    print(communication_protocol.recv_packet(c))
-    # time.sleep(2)
-    c.close()
 
 
 if __name__ == "__main__":
@@ -163,5 +143,9 @@ if __name__ == "__main__":
         thread.join()"""
     a = Server()
     a.start()
-    input()
+    try:
+        while True:
+            pass
+    except KeyboardInterrupt:
+        pass
     a.close()

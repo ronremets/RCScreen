@@ -20,16 +20,16 @@ class AdvancedSocket(object):
     """
     def __init__(self):
         self._socket = None
-        self._recv_packet_queue = None
-        self._packet_to_send_queue = None
+        # self._recv_packet_queue = None
+        # self._packet_to_send_queue = None
         self._recv_thread = None
         self._send_thread = None
-        self._input_lock = threading.Lock()
-        self._output_lock = threading.Lock()
+        self._data_received_lock = threading.Lock()
+        self._data_to_send_lock = threading.Lock()
         self._running_lock = threading.Lock()
         self._set_running(False)
-        self.input = None  # Data received
-        self.output = None  # Data to send
+        self.data_received = None
+        self.data_to_send = None
 
     @property
     def running(self):
@@ -41,24 +41,24 @@ class AdvancedSocket(object):
             self.__running = value
 
     @property
-    def output(self):
-        with self._output_lock:
-            return self.__output
+    def data_to_send(self):
+        with self._data_to_send_lock:
+            return self.__data_to_send
 
-    @output.setter
-    def output(self, value):
-        with self._output_lock:
-            self.__output = value
+    @data_to_send.setter
+    def data_to_send(self, value):
+        with self._data_to_send_lock:
+            self.__data_to_send = value
 
     @property
-    def input(self):
-        with self._input_lock:
-            return self.__input
+    def data_received(self):
+        with self._data_received_lock:
+            return self.__data_received
 
-    @input.setter
-    def input(self, value):
-        with self._input_lock:
-            self.__input = value
+    @data_received.setter
+    def data_received(self, value):
+        with self._data_received_lock:
+            self.__data_received = value
 
     def _recv_packets(self):
         while self.running:
@@ -67,7 +67,8 @@ class AdvancedSocket(object):
             #        communication_protocol.recv_packet(self._socket))
             # except queue.Full:
             #    pass
-            self.input = communication_protocol.recv_packet(self._socket)
+            self.data_received = communication_protocol.recv_packet(
+                self._socket)
 
     def _send_messages(self):
         while self.running:
@@ -77,11 +78,11 @@ class AdvancedSocket(object):
             #        self._packet_to_send_queue.get())
             # except queue.Empty:
             #    pass
-            output = self.output
-            if output is not None:
+            data_to_send = self.data_to_send
+            if data_to_send is not None:
                 communication_protocol.send_message(
                     self._socket,
-                    output)
+                    data_to_send)
 
     def start(self, code, other_code):
         """
