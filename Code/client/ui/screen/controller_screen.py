@@ -10,8 +10,9 @@ from kivy.properties import ObjectProperty, BooleanProperty, StringProperty
 from kivy.uix.image import CoreImage
 from kivy.clock import Clock
 
-import advanced_socket
-import screen_recorder
+from Code.communication import advanced_socket
+from Code.client import screen_recorder
+from Code.client.ui import streamed_image
 
 
 class ControllerScreen(Screen):
@@ -34,31 +35,28 @@ class ControllerScreen(Screen):
         Update the screen.
         """
         if self.is_controller:
-            image_bytes = self._socket.data_received
+            image_bytes = self._socket.recv()
             # It's None until other_client connects
             if image_bytes is not None:
                 image_data = io.BytesIO(image_bytes)
                 image_data.seek(0)
-                #image = PIL.Image.frombytes(
-                #    'RGB',
-                #    len(image_bytes),
-                #    image_bytes,
-                #    'raw',
-                #    'BGRX')
                 self.screen.texture = CoreImage(image_data, ext="png").texture
                 self.screen.reload()
         else:
             frame = self._screen_recorder.frame
             # It's None until other_client connects
             if frame is not None:
-                self._socket.data_to_send = {"content": frame}
+                self._socket.send({"content": frame})
 
     def on_enter(self, *args):
         """
         When this screen starts, start showing the screen.
         """
         print("other_code:", self.other_code)
-        self._socket.start(self.code, self.other_code)
+        if self.is_controller:
+            self._socket.start(self.code, self.other_code, False, True)
+        else:
+            self._socket.start(self.code, self.other_code, True, False)
         self._screen_recorder.start()
         self._screen_update_event = Clock.schedule_interval(
             self._update_screen, 0)

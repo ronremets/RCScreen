@@ -7,7 +7,6 @@ __author__ = "Ron Remets"
 
 import socket
 import threading
-import time
 
 import communication_protocol
 import client

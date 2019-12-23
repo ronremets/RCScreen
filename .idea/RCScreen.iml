@@ -6,6 +6,12 @@
       <sourceFolder url="file://$MODULE_DIR$/Code/controlled" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/Code/mediator" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/Code/client" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/Code/client/communication" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/Code/client/ui" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/Code/communication" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/Code" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/Code/client/ui/popup" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/Code/client/ui/screen" isTestSource="false" />
     </content>
     <orderEntry type="jdk" jdkName="Python 3.7" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />

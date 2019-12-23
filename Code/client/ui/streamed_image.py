@@ -9,21 +9,21 @@ import kivy.uix.image
 from kivy.properties import ObjectProperty
 from kivy.clock import Clock
 
-from advanced_socket import AdvancedSocket
 
-
-class ImageStreamer(kivy.uix.image.Image):
+class StreamedImage(kivy.uix.image.Image):
     """
     Streams image from socket
     """
-    connection = ObjectProperty(None)
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, connection, **kwargs):
+        super().__init__(**kwargs)
         self._screen_update_event = None
+        self.connection = connection
 
     def _screen_update(self, *_):
-        image_bytes = self.connection.data_received
+        """
+        Update the image.
+        """
+        image_bytes = self.connection.recv()
         image_data = io.BytesIO(image_bytes)
         image_data.seek(0)
         self.texture = kivy.uix.image.CoreImage(
@@ -31,5 +31,8 @@ class ImageStreamer(kivy.uix.image.Image):
         self.reload()
 
     def on_enter(self):
+        """
+        Start the image updating.
+        """
         self._screen_update_event = Clock.schedule_interval(
             self._screen_update, 0)

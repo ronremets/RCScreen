@@ -6,8 +6,9 @@ __author__ = "Ron Remets"
 
 import threading
 import socket
-# import queue
+import queue
 
+import message_buffer
 import communication_protocol
 
 SERVER_ADDRESS = ("127.0.0.1", 2125)
@@ -20,16 +21,15 @@ class AdvancedSocket(object):
     """
     def __init__(self):
         self._socket = None
-        # self._recv_packet_queue = None
-        # self._packet_to_send_queue = None
+        self._buffered = True
         self._recv_thread = None
         self._send_thread = None
-        self._data_received_lock = threading.Lock()
-        self._data_to_send_lock = threading.Lock()
+        self._messages_received = message_buffer.MessageBuffer(self._buffered)
+        self._messages_to_send = message_buffer.MessageBuffer(self._buffered)
+        self._messages_received_lock = threading.Lock()
+        self._messages_to_send_lock = threading.Lock()
         self._running_lock = threading.Lock()
         self._set_running(False)
-        self.data_received = None
-        self.data_to_send = None
 
     @property
     def running(self):
@@ -40,58 +40,55 @@ class AdvancedSocket(object):
         with self._running_lock:
             self.__running = value
 
-    @property
-    def data_to_send(self):
-        with self._data_to_send_lock:
-            return self.__data_to_send
-
-    @data_to_send.setter
-    def data_to_send(self, value):
-        with self._data_to_send_lock:
-            self.__data_to_send = value
-
-    @property
-    def data_received(self):
-        with self._data_received_lock:
-            return self.__data_received
-
-    @data_received.setter
-    def data_received(self, value):
-        with self._data_received_lock:
-            self.__data_received = value
-
-    def _recv_packets(self):
+    def _receive_messages(self):
+        """
+        Receive messages until server closes
+        """
         while self.running:
-            # try:
-            #    self._recv_packet_queue.put(
-            #        communication_protocol.recv_packet(self._socket))
-            # except queue.Full:
-            #    pass
-            self.data_received = communication_protocol.recv_packet(
-                self._socket)
+            self._messages_received.add(communication_protocol.recv_packet(
+                self._socket))
 
     def _send_messages(self):
+        """
+        Send messages until server closes
+        """
         while self.running:
-            # try:
-            #    communication_protocol.send_message(
-            #        self._socket,
-            #        self._packet_to_send_queue.get())
-            # except queue.Empty:
-            #    pass
-            data_to_send = self.data_to_send
-            if data_to_send is not None:
+            try:
                 communication_protocol.send_message(
                     self._socket,
-                    data_to_send)
+                    self._messages_to_send.pop())
+            except queue.Empty:
+                pass
 
-    def start(self, code, other_code):
+    def switch_state(self, input_is_buffered, output_is_buffered):
+        """
+        Change the state of the socket buffers
+        :param input_is_buffered: bool, the input state
+        :param output_is_buffered: bool, the output state
+        """
+        self._messages_received.switch_state(input_is_buffered)
+        self._messages_to_send.switch_state(output_is_buffered)
+
+    def send(self, message):
+        """
+        Send a message.
+        :param message: The message to send
+        """
+        self._messages_to_send.add(message)
+
+    def recv(self):
+        """
+        Receive a message from the other side
+        :return: The message.
+        """
+        return self._messages_received.pop()
+
+    def start(self, code, other_code, input_is_buffered, output_is_buffered):
         """
         Start the server and its threads.
         """
-        self._recv_thread = threading.Thread(target=self._recv_packets)
+        self._recv_thread = threading.Thread(target=self._receive_messages)
         self._send_thread = threading.Thread(target=self._send_messages)
-        # self._packet_to_send_queue = queue.SimpleQueue()
-        # self._recv_packet_queue = queue.SimpleQueue()
         self._socket = socket.socket()
         self._socket.settimeout(TIMOUT)
         self._socket.connect(SERVER_ADDRESS)
@@ -102,6 +99,7 @@ class AdvancedSocket(object):
         # This suck change this
         # is bad dont it you have so much to live for
         # injection is inevitable (sql injection)
+        self.switch_state(input_is_buffered, output_is_buffered)
         self._set_running(True)
         self._send_thread.start()
         self._recv_thread.start()
