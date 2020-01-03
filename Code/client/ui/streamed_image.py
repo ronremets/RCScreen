@@ -5,8 +5,8 @@ Streams image from a socket
 __author__ = "Ron Remets"
 
 import io
+
 import kivy.uix.image
-from kivy.properties import ObjectProperty
 from kivy.clock import Clock
 
 
@@ -14,10 +14,10 @@ class StreamedImage(kivy.uix.image.Image):
     """
     Streams image from socket
     """
-    def __init__(self, connection, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._screen_update_event = None
-        self.connection = connection
+        self.connection = None  # TODO: replace with app.connection
 
     def _screen_update(self, *_):
         """
@@ -30,9 +30,15 @@ class StreamedImage(kivy.uix.image.Image):
             image_data, ext="png").texture
         self.reload()
 
-    def on_enter(self):
+    def start(self):
         """
         Start the image updating.
         """
         self._screen_update_event = Clock.schedule_interval(
             self._screen_update, 0)
+
+    def stop(self):
+        """
+        Stop the streaming
+        """
+        self._screen_update_event.cancel()

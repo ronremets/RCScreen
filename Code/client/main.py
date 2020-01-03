@@ -6,15 +6,21 @@ __author__ = "Ron Remets"
 
 from kivy.app import App
 from kivy.lang import Builder
+from kivy.properties import BooleanProperty, ObjectProperty
+
 
 # noinspection PyUnresolvedReferences
 import ui
+
+SERVER_ADDRESS = ("127.0.0.1", 2125)
 
 
 class RCScreenApp(App):
     """
     Responsible for the whole client's application.
     """
+    user = ObjectProperty(None)
+    connection = ObjectProperty(None)
 
     def build(self):
         """

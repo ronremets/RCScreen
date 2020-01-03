@@ -1,12 +1,17 @@
 #: kivy 1.10.1
 
+
 <DynamicButton@Button>:
     texture_size: self.width / 2, self.height / 2
+
 
 <DynamicLabel@Label>:
     texture_size: self.width / 2, self.height / 2
 
+
 WindowManager:
+    LoginScreen:
+    SignupScreen:
     MainMenuScreen:
     SettingsScreen:
     HelpScreen:
@@ -14,7 +19,137 @@ WindowManager:
     ConnectScreen:
     ControllerScreen:
 
-<MainMenuScreen>
+
+<LoginScreen>:
+    login_button: login_button
+    username_text_input: username_text_input
+    password_text_input: password_text_input
+    name: "login"
+    GridLayout:
+        size: root.size
+        pos: root.pos
+        rows: 3
+        cols: 2
+        padding:
+            ((self.width / self.cols) * 0.25,
+            (self.height / self.rows) * 0.2)
+        spacing: (self.height / self.rows) * 0.2
+
+        DynamicLabel:
+            text: "Username:"
+
+        TextInput:
+            id: username_text_input
+            text: "meme"
+
+        DynamicLabel:
+            text: "Password:"
+
+        TextInput:
+            id: password_text_input
+            text: "meme_is_good"
+
+        DynamicButton:
+            id: login_button
+            text: "Login"
+
+        DynamicButton:
+            text: "Signup"
+            on_press:
+                root.manager.transition.direction = "right"
+                app.root.current = "signup"
+
+
+<SignupScreen>:
+    signup_button: signup_button
+    username_text_input: username_text_input
+    password_text_input: password_text_input
+    name: "signup"
+    GridLayout:
+        size: root.size
+        pos: root.pos
+        rows: 3
+        cols: 2
+        padding:
+            ((self.width / self.cols) * 0.25,
+            (self.height / self.rows) * 0.2)
+        spacing: (self.height / self.rows) * 0.2
+
+        DynamicLabel:
+            text: "Username:"
+
+        TextInput:
+            id: username_text_input
+            text: "meme"
+
+        DynamicLabel:
+            text: "Password:"
+
+        TextInput:
+            id: password_text_input
+            text: "meme_is_good"
+
+        DynamicButton:
+            id: signup_button
+            text: "Signup"
+
+        DynamicButton:
+            text: "Back"
+            on_press:
+                root.manager.transition.direction = "left"
+                app.root.current = "login"
+
+
+<ConnectScreen>:
+    name: "connect"
+    controller_checkbox: controller_checkbox
+    other_code_text_input: other_code_text_input
+    code_text_input: code_text_input
+    GridLayout:
+        size: root.size
+        pos: root.pos
+        rows: 4
+        cols: 2
+        padding:
+            ((self.width / self.cols) * 0.25,
+            (self.height / self.rows) * 0.2)
+        spacing: (self.height / self.rows) * 0.2
+
+        DynamicLabel:
+            text: "Your code: "
+
+        TextInput:
+            id: code_text_input
+            text: "0"
+
+        DynamicLabel:
+            text: "Enter code:"
+
+        TextInput:
+            id: other_code_text_input
+            text: "1"
+
+        DynamicButton:
+            text: "Connect"
+            on_press:
+                app.is_controller = root.controller_checkbox.active
+                root.manager.transition.direction = "left"
+                app.root.current = "controller"
+
+        DynamicButton:
+            text: "Back"
+            on_press:
+                root.manager.transition.direction = "right"
+                app.root.current = "main"
+
+        DynamicLabel:
+            text: "Controller:"
+
+        CheckBox:
+            id: controller_checkbox
+
+
+<MainMenuScreen>:
     name: "main"
     GridLayout:
         size: root.size
@@ -24,28 +159,34 @@ WindowManager:
             ((self.width / self.cols) * 0.25,
             (self.height / self.rows) * 0.2)
         spacing: (self.height / self.rows) * 0.2
+
         DynamicLabel:
             text: "RCScreen"
+
         DynamicButton:
             text: "Connect"
             on_press:
                 root.manager.transition.direction = "left"
                 app.root.current = "connect"
+
         DynamicButton:
             text: "Settings"
             on_press:
                 root.manager.transition.direction = "left"
                 app.root.current = "settings"
+
         DynamicButton:
             text: "Help"
             on_press:
                 root.manager.transition.direction = "left"
                 app.root.current = "help"
+
         DynamicButton:
             text: "Feedback"
             on_press:
                 root.manager.transition.direction = "left"
                 app.root.current = "feedback"
+
 
 <HelpScreen>
     name: "help"
@@ -60,11 +201,13 @@ WindowManager:
     
         DynamicLabel:
             text: "help screen"
+
         DynamicButton:
             text: "Back"
             on_press:
                 root.manager.transition.direction = "right"
                 app.root.current = "main"
+
 
 <SettingsScreen>
     name: "settings"
@@ -79,11 +222,13 @@ WindowManager:
     
         DynamicLabel:
             text: "settings screen"
+
         DynamicButton:
             text: "Back"
             on_press:
                 root.manager.transition.direction = "right"
                 app.root.current = "main"
+
 
 <FeedbackScreen>
     name: "feedback"
@@ -101,19 +246,29 @@ WindowManager:
             on_press:
                 root.manager.transition.direction = "right"
                 app.root.current = "main"
+
         Label:
+
         DynamicLabel:
             text: "Enter Email:"
+
         TextInput:
+
         DynamicLabel:
             text: "Enter subject:"
+
         TextInput:
+
         DynamicLabel:
             text: "Enter description:"
+
         TextInput:
+
         Label:
+
         DynamicButton:
             text: "Submit"
+
 
 <ErrorPopup>:
     GridLayout:
@@ -128,68 +283,20 @@ WindowManager:
     
         DynamicLabel:
             text: "error popup"
+
         DynamicButton:
             text: "Back"
             on_press:
                 self.text = "pressed"
 
-<ConnectScreen>:
-    name: "connect"
-    controller_checkbox: controller_checkbox
-    other_code_text_input: other_code_text_input
-    code_text_input: code_text_input
-    GridLayout:
-        size: root.size
-        pos: root.pos
-        rows: 4
-        cols: 2
-        padding:
-            ((self.width / self.cols) * 0.25,
-            (self.height / self.rows) * 0.2)
-        spacing: (self.height / self.rows) * 0.2
-    
-        DynamicLabel:
-            text: "Your code: "
-        TextInput:
-            id: code_text_input
-            text: "0"
-
-        DynamicLabel:
-            text: "Enter code:"
-
-        TextInput:
-            id: other_code_text_input
-            text: "1"
-
-        DynamicButton:
-            text: "Connect"
-            on_press:
-                root.manager.code = root.code_text_input.text
-                root.manager.other_code = root.other_code_text_input.text
-                root.manager.is_controller = root.controller_checkbox.active
-                root.manager.transition.direction = "left"
-                app.root.current = "controller"
-        DynamicButton:
-            text: "Back"
-            on_press:
-                root.manager.transition.direction = "right"
-                app.root.current = "main"
-        DynamicLabel:
-            text: "Controller:"
-        CheckBox:
-            id: controller_checkbox
 
 <ControllerScreen>
-    screen: screen_image
+    screen: screen
     name: "controller"
-    on_enter:
-        self.is_controller = root.manager.is_controller
-        self.code = root.manager.code
-        self.other_code = root.manager.other_code
-    Image:
-        id: screen_image
-        size: root.size
-        source: ""
+
+    StreamedImage:
+        id: screen
+
     DynamicButton:
         background_color: 1, 1, 1, 0.5
         size: root.height / 10, root.height / 10

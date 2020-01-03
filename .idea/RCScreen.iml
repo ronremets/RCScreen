@@ -12,6 +12,7 @@
       <sourceFolder url="file://$MODULE_DIR$/Code" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/Code/client/ui/popup" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/Code/client/ui/screen" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/Code/data" isTestSource="false" />
     </content>
     <orderEntry type="jdk" jdkName="Python 3.7" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />

@@ -6,14 +6,30 @@ __author__ = "Ron Remets"
 
 import lz4.frame
 
-MESSAGE_PREFIX_LENGTH = 16  # The length of the prefix of the data.
+from message import Message, MESSAGE_LENGTH_LENGTH, MESSAGE_TYPE_LENGTH
+
 BUFFER_SIZE = 1024  # The buffer size used when receiving and sending.
 ENCODING = "ASCII"  # The encoding used in the protocol.
 
 
+def _pack_message(message):
+    """
+    Pack a message object to bytes.
+    :return: The message in bytes.
+    """
+    packed_content = lz4.frame.compress(message.content)
+    length = len(packed_content)
+    packet = (
+            str(length).zfill(
+                MESSAGE_LENGTH_LENGTH).encode(ENCODING)
+            + str(message.message_type).zfill(
+                MESSAGE_TYPE_LENGTH).encode(ENCODING)
+            + message.content)
+    return packet
+
+
 def _recv_fixed_length_data(socket, length):
     """
-    TODO: make it variable length!!!!
     Receives a fixed length packet from a socket.
     :param socket: The socket to receive with.
     :param length: The length of the packet.
@@ -31,17 +47,17 @@ def _recv_fixed_length_data(socket, length):
     return data
 
 
-def recv_packet(socket):
+def recv_message(socket):
     """
     Receive a packet from a socket.
     :param socket: The socket to receive with.
     :return: The packet in bytes
     :raise RuntimeError: If socket is closed from the other side.
     """
-    length = int(_recv_fixed_length_data(socket, MESSAGE_PREFIX_LENGTH))
-    packet = _recv_fixed_length_data(socket, length)
-    content = lz4.frame.decompress(packet)
-    return content
+    message_type = _recv_fixed_length_data(socket, MESSAGE_TYPE_LENGTH)
+    length = int(_recv_fixed_length_data(socket, MESSAGE_LENGTH_LENGTH))
+    content = lz4.frame.decompress(_recv_fixed_length_data(socket, length))
+    return Message(message_type, content)
 
 
 def _send_raw_data(socket, data):
@@ -65,11 +81,4 @@ def send_message(socket, message):
     :param socket: The socket to receive with.
     :param message: The message to send in dictionary with bytes.
     """
-    print("before:", str(len(message["content"])))
-    content = lz4.frame.compress(message["content"])
-    print("Len after is:", str(len(content)))
-    packet = (
-        f"{len(content)}".zfill(
-            MESSAGE_PREFIX_LENGTH).encode(ENCODING)
-        + content)
-    _send_raw_data(socket, packet)
+    _send_raw_data(socket, _pack_message(message))

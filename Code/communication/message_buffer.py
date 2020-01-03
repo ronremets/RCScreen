@@ -12,7 +12,7 @@ class MessageBuffer(object):
     """
     A buffer for storing messages
     """
-    def __init__(self, buffered, maxsize=0):
+    def __init__(self, buffered=True, maxsize=100):
         """
         :param buffered: The state of the buffer:
                       True - buffer the messages until you
@@ -58,14 +58,17 @@ class MessageBuffer(object):
     def pop(self):
         """
         Get a message from the buffer.
-        :return: The message
+        :return: The message and if there is not one, return None
         """
         with self._messages_lock:
             if self._buffered:
-                return self._messages.pop()
-            else:
-                if self._messages is None:
-                    raise queue.Empty("Buffer is empty")
-                message = self._messages
-                self._messages = None
-                return message
+                if not self._messages.empty():
+                    # no dead lock because otherwise it would not
+                    # enter the if
+                    return self._messages.pop(block=True)
+                return None
+            if self._messages is None:
+                return None
+            message = self._messages
+            self._messages = None
+            return message

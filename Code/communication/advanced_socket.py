@@ -6,12 +6,10 @@ __author__ = "Ron Remets"
 
 import threading
 import socket
-import queue
 
 import message_buffer
 import communication_protocol
 
-SERVER_ADDRESS = ("127.0.0.1", 2125)
 TIMOUT = None
 
 
@@ -19,13 +17,13 @@ class AdvancedSocket(object):
     """
     Wrapper for socket for use in the front end.
     """
-    def __init__(self):
+    def __init__(self, address):
+        self._address = address
         self._socket = None
-        self._buffered = True
         self._recv_thread = None
         self._send_thread = None
-        self._messages_received = message_buffer.MessageBuffer(self._buffered)
-        self._messages_to_send = message_buffer.MessageBuffer(self._buffered)
+        self._messages_received = message_buffer.MessageBuffer()
+        self._messages_to_send = message_buffer.MessageBuffer()
         self._messages_received_lock = threading.Lock()
         self._messages_to_send_lock = threading.Lock()
         self._running_lock = threading.Lock()
@@ -45,7 +43,7 @@ class AdvancedSocket(object):
         Receive messages until server closes
         """
         while self.running:
-            self._messages_received.add(communication_protocol.recv_packet(
+            self._messages_received.add(communication_protocol.recv_message(
                 self._socket))
 
     def _send_messages(self):
@@ -53,12 +51,11 @@ class AdvancedSocket(object):
         Send messages until server closes
         """
         while self.running:
-            try:
+            message = self._messages_to_send.pop()
+            if message is not None:
                 communication_protocol.send_message(
                     self._socket,
-                    self._messages_to_send.pop())
-            except queue.Empty:
-                pass
+                    message)
 
     def switch_state(self, input_is_buffered, output_is_buffered):
         """
@@ -83,22 +80,18 @@ class AdvancedSocket(object):
         """
         return self._messages_received.pop()
 
-    def start(self, code, other_code, input_is_buffered, output_is_buffered):
+    def start(self, input_is_buffered, output_is_buffered, client_socket=None):
         """
         Start the server and its threads.
         """
+        if client_socket is None:
+            self._socket = socket.socket()
+            self._socket.connect(self._address)
+        else:
+            self._socket = client_socket
+        self._socket.settimeout(TIMOUT)
         self._recv_thread = threading.Thread(target=self._receive_messages)
         self._send_thread = threading.Thread(target=self._send_messages)
-        self._socket = socket.socket()
-        self._socket.settimeout(TIMOUT)
-        self._socket.connect(SERVER_ADDRESS)
-        communication_protocol.send_message(
-            self._socket,
-            {"content": f"{code}\n{other_code}".encode(
-                communication_protocol.ENCODING)})
-        # This suck change this
-        # is bad dont it you have so much to live for
-        # injection is inevitable (sql injection)
         self.switch_state(input_is_buffered, output_is_buffered)
         self._set_running(True)
         self._send_thread.start()

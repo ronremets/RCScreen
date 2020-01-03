@@ -5,37 +5,36 @@ The controller screen.
 __author__ = "Ron Remets"
 
 import io
+
+from kivy.app import App
 from kivy.uix.screenmanager import Screen
 from kivy.properties import ObjectProperty, BooleanProperty, StringProperty
 from kivy.uix.image import CoreImage
 from kivy.clock import Clock
 
-from Code.communication import advanced_socket
 from Code.client import screen_recorder
-from Code.client.ui import streamed_image
+
+app = App.get_running_app()
 
 
 class ControllerScreen(Screen):
     """
     The screen where the client controls another client.
     """
-    screen = ObjectProperty()
+    screen = ObjectProperty(None)
     is_controller = BooleanProperty()
-    code = StringProperty()
-    other_code = StringProperty()
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._screen_update_event = None
-        self._socket = advanced_socket.AdvancedSocket()
         self._screen_recorder = screen_recorder.ScreenRecorder()
 
     def _update_screen(self, *_):
         """
         Update the screen.
         """
-        if self.is_controller:
-            image_bytes = self._socket.recv()
+        if app.is_controller:
+            image_bytes = app.connection.recv()
             # It's None until other_client connects
             if image_bytes is not None:
                 image_data = io.BytesIO(image_bytes)
@@ -46,17 +45,16 @@ class ControllerScreen(Screen):
             frame = self._screen_recorder.frame
             # It's None until other_client connects
             if frame is not None:
-                self._socket.send({"content": frame})
+                app.connection.send({"content": frame})
 
     def on_enter(self, *args):
         """
         When this screen starts, start showing the screen.
         """
-        print("other_code:", self.other_code)
-        if self.is_controller:
-            self._socket.start(self.code, self.other_code, False, True)
+        if app.connection.is_controller:
+            app.connection.start(self.code, self.other_code, False, True)
         else:
-            self._socket.start(self.code, self.other_code, True, False)
+            app.connection.start(self.code, self.other_code, True, False)
         self._screen_recorder.start()
         self._screen_update_event = Clock.schedule_interval(
             self._update_screen, 0)
@@ -66,5 +64,5 @@ class ControllerScreen(Screen):
         When this screen stops, wait for screen to stop.
         """
         self._screen_update_event.cancel()
-        self._socket.close(kill=True)  # TODO: change kill to False
+        app.connection.close(kill=True)  # TODO: change kill to False
         self._screen_recorder.close()
