@@ -13,6 +13,7 @@ from communication.message import Message, MESSAGE_TYPES
 from communication import communication_protocol
 from communication.advanced_socket import AdvancedSocket
 import client
+from data.users_database import UsersDatabase
 
 # TODO: Add a DNS request instead of static IP and port.
 SERVER_ADDRESS = ("0.0.0.0", 2125)
@@ -26,10 +27,16 @@ class Server(object):
     def __init__(self):
         self._server_socket = None
         self._connected_clients = None
+        self._clients = None
+        self._users = None
+        self._users_database = None
         self._connect_clients_thread = None
         self._remove_closed_clients_thread = None
         self._running_lock = threading.Lock()
         self._connected_clients_lock = threading.Lock()
+        self._clients_lock = threading.Lock()
+        self._users_database_lock = threading.Lock()
+        self._users_lock = threading.Lock()
         self._set_running(False)
 
     @property
@@ -74,10 +81,10 @@ class Server(object):
                 other_client.send(client_object.recv())
         client_object.close()
 
-    def _connect_socket(self, client_socket):
+    def _login(self, client_socket):
         """
-        connect a socket to a client
-        :param client_socket: The socket of the client.
+        Login a socket to a client.
+        :param client_socket: The socket to login
         :return: The client object of the socket
         """
         client_info = communication_protocol.recv_message(
@@ -86,7 +93,7 @@ class Server(object):
         username = client_info[0]
         password = client_info[1]
         # TODO: add something like logging in here
-        user = User(username, password)
+        user = self._users_database.get_user(username, password)
         socket_type = client_info[2]
         client_is_new = True
         client_object = None
@@ -107,9 +114,28 @@ class Server(object):
         print("done connecting")
         return client_object, socket_type
 
-    def _add_clients(self):
+    def _signup(self, client_socket:
+        pass
+
+    def _create_client(self, client_socket):
         """
-        Add clients to be connected until server closes.
+        Create a client with the socket
+        :param client_socket: The socket of the client.
+        :return: The client object of the socket
+        """
+        return client_socket
+        connecting_method = communication_protocol.recv_message(
+            client_socket).content.decode(communication_protocol.ENCODING)
+        if connecting_method == "login":
+            return self._login(client_socket)
+        elif connecting_method == "signup":
+            return self._signup(client_socket)
+        else:
+            pass  # create error
+
+    def _connect_clients(self):
+        """
+        Connect clients until server closes.
         """
         while self.running:
             try:
@@ -141,12 +167,15 @@ class Server(object):
         """
         # maybe use a dict like {user:client}
         self._connected_clients = []
+        self._users = []
+        self._clients = []
+        self._users_database = UsersDatabase("users.db")
         self._server_socket = socket.socket()
         self._server_socket.settimeout(TIMEOUT)
         self._server_socket.bind(SERVER_ADDRESS)
         self._server_socket.listen()  # TODO: Add parameter here.
         self._connect_clients_thread = threading.Thread(
-            target=self._add_clients)
+            target=self._connect_clients)
         self._remove_closed_clients_thread = threading.Thread(
             target=self._remove_closed_clients)
         self._set_running(True)
