@@ -8,15 +8,17 @@ __author__ = "Ron Remets"
 import socket
 import threading
 
-from data.user import User
+from mediator.user import User
 from communication.message import Message, MESSAGE_TYPES
 from communication import communication_protocol
 from communication.advanced_socket import AdvancedSocket
-import client
+from connection import Connection
 from data.users_database import UsersDatabase
 
 # TODO: Add a DNS request instead of static IP and port.
-SERVER_ADDRESS = ("0.0.0.0", 2125)
+SERVER_ADDRESS = ("0.0.0.0", 2125)  # TODO: put it here or in main?
+# TODO: Do we need timeout? Did we implement it all the way? How much to
+#  it
 TIMEOUT = 2
 
 
@@ -26,15 +28,13 @@ class Server(object):
     """
     def __init__(self):
         self._server_socket = None
-        self._connected_clients = None
-        self._clients = None
+        self._connections = None
         self._users = None
         self._users_database = None
-        self._connect_clients_thread = None
-        self._remove_closed_clients_thread = None
+        self._connect_connections_thread = None
+        self._remove_closed_connections_thread = None
         self._running_lock = threading.Lock()
-        self._connected_clients_lock = threading.Lock()
-        self._clients_lock = threading.Lock()
+        self._connections_lock = threading.Lock()
         self._users_database_lock = threading.Lock()
         self._users_lock = threading.Lock()
         self._set_running(False)
@@ -51,136 +51,169 @@ class Server(object):
         with self._running_lock:
             self.__running = value
 
-    def _run_connection(self, client_socket):
-        """
-        run a connection to a client until the server closes
-        :param client_socket: the socket of the connection
-        """
-        client_object, socket_type = self._connect_socket(client_socket)
-        # TODO: fix: getpeerbyname might not be supported on all systems
-        connection = AdvancedSocket(client_socket.getpeerbyname())
-        if socket_type == "main":
-            connection.start(True, True, client_socket)
-        elif socket_type in ("frame", "sound", "mouse move"):
-            other_username = communication_protocol.recv_message(client_socket)
-            other_client = None
-            found_username = False
-            while not found_username:
-                with self._connected_clients_lock:
-                    for current_client in self._connected_clients:
-                        if other_username == current_client.user.username:
-                            other_client = current_client
-                            found_username = True
-            connection.start(False, True, client_socket)
-        elif socket_type in ("keyboard", "mouse button"):
-            connection.start(True, False, client_socket)
-        while client_object.running:
-            if socket_type == "main":
-                pass
-            if socket_type == "frame":
-                other_client.send(client_object.recv())
-        client_object.close()
+    def _run_main(self, connection, user):
+        while self.running:
+            # TODO: add parameters to the protocol to make it more clear
+            #  for example: "fixed_length_header|param_name = value\n
+            #  like http protocol
+            params = connection.socket.recv().get_content_as_text().split("\n")
+            if params[0] == "set partner":
+                partner_username = params[1]
+                # TODO: check if partner exists
+                if self._users_database.user_exists(partner_username):
+                    #  TODO: Maybe add a thread to do this in order to
+                    #   not block this thread
+                    pass
 
-    def _login(self, client_socket):
+                # TODO: check if partner online
+                #  have a partner object from user dict
+                #  set user.partner to the partner
+            elif params[0] == "get all usernames":
+                connection.send(Message(
+                    MESSAGE_TYPES["server interaction"],
+                    self._users_database.get_all_usernames()))
+            else:
+                pass  # TODO: Add errors here
+            # TODO: Add more commands like closing other connections of
+            #  this user and closing all connections and deleting the
+            #  user and more
+
+    def _run_buffered(self, connection, user):
+        pass  # TODO: write this
+
+    def _run_unbuffered(self, connection, user):
+        pass  # TODO: write this
+
+    def _join_connection(self, connection, username, password):
+        with self._connections_lock:
+            self._connections.append(connection)
+
+        with self._users_lock:
+            if username in self._users:  # TODO: Maybe .keys() ?
+                user = self._users[username]
+                user.connections.append(connection)
+            else:
+                user = User(username, password)
+                user.connections.append(connection)
+                self._users[username] = user
+        return user
+
+    def _login(self, connection_socket, connection_info):
         """
-        Login a socket to a client.
-        :param client_socket: The socket to login
-        :return: The client object of the socket
+        Login a socket
+        :param connection_socket: The socket to login
+        :param connection_info: info used to login
+        :return: Connection object and its user
         """
-        client_info = communication_protocol.recv_message(
-            client_socket).content.decode(communication_protocol.ENCODING)
-        client_info = client_info.split("\n")
-        username = client_info[0]
-        password = client_info[1]
+        username = connection_info[0]
+        password = connection_info[1]
         # TODO: add something like logging in here
-        user = self._users_database.get_user(username, password)
-        socket_type = client_info[2]
-        client_is_new = True
-        client_object = None
-        with self._connected_clients_lock:
-            for current_client in self._connected_clients:
-                if user == current_client.user:
-                    current_client.add_socket(client_socket, socket_type)
-                    client_is_new = False
-                    client_object = current_client
-                    break
-            if client_is_new:
-                client_object = client.Client(user)
-                client_object.add_socket(client_socket, socket_type)
-                self._connected_clients.append(client_object)
-        communication_protocol.send_message(client_socket, Message(
+        self._users_database.get_user(username, password)
+        connection_type = connection_info[2]
+        connection = Connection(connection_socket, connection_type)
+        user = self._join_connection(connection, username, password)
+        return connection, user
+
+    def _signup(self, connection_socket, connection_info):
+        username = connection_info[0]
+        password = connection_info[1]
+        # TODO: add something like logging in here
+        self._users_database.add_user(username, password)
+        return self._login(connection_socket, connection_info)
+
+    def _create_connection(self, connection_socket):
+        """
+        Create a connection
+        :param connection_socket: The socket of the connection.
+        :return: Connection object and its user object
+        """
+        connection_advanced_socket = AdvancedSocket()
+        connection_advanced_socket.start(True, True, connection_socket)
+        connecting_method = connection_advanced_socket.recv(
+            ).get_content_as_text()
+        connection_info = connection_socket.recv(
+            ).get_content_as_text().split("\n")
+        if connecting_method == "login":
+            connection, user = self._login(
+                connection_advanced_socket,
+                connection_info)
+        elif connecting_method == "signup":
+            connection, user = self._signup(
+                connection_advanced_socket,
+                connection_info)
+        else:
+            raise ValueError("Bad method")
+        connection.socket.send(Message(
             MESSAGE_TYPES["server interaction"],
             "Connected".encode(communication_protocol.ENCODING)))
-        print("done connecting")
-        return client_object, socket_type
+        return connection, user
 
-    def _signup(self, client_socket:
-        pass
+    def _run_connection(self, connection_socket):
+        """
+        run a connection to a client until the server closes
+        :param connection_socket: the socket of the connection
+        """
+        connection, user = self._create_connection(connection_socket)
+        # TODO: fix: getpeerbyname might not be supported on all systems
+        if connection.type == "main":
+            self._run_main(connection, user)
+        elif connection.type in ("frame", "sound", "mouse move"):
+            connection.socket.switch_state(False, True)
+            self._run_unbuffered(connection, user)
+        elif connection.type in ("keyboard", "mouse button"):
+            connection.socket.switch_state(True, False)
+            self._run_buffered(connection, user)
+        connection.close()
 
-    def _create_client(self, client_socket):
+    def _connect_connections(self):
         """
-        Create a client with the socket
-        :param client_socket: The socket of the client.
-        :return: The client object of the socket
-        """
-        return client_socket
-        connecting_method = communication_protocol.recv_message(
-            client_socket).content.decode(communication_protocol.ENCODING)
-        if connecting_method == "login":
-            return self._login(client_socket)
-        elif connecting_method == "signup":
-            return self._signup(client_socket)
-        else:
-            pass  # create error
-
-    def _connect_clients(self):
-        """
-        Connect clients until server closes.
+        Connect connections until server closes.
         """
         while self.running:
             try:
-                client_socket, addr = self._server_socket.accept()
+                connection_socket, addr = self._server_socket.accept()
                 # TODO: Remove and replace with logging.
                 print(f"New client: {addr}")
                 threading.Thread(
                     target=self._run_connection,
-                    args=(client_socket,)).start()
+                    args=(connection_socket,)).start()
             except socket.timeout:
                 pass
 
-    def _remove_closed_clients(self):
+    def _remove_closed_connections(self):
         """
-        Remove closed clients from the list of clients until server
-         closes.
+        Remove closed connections from the list of connections until
+        the server closes.
         """
+        # TODO: Rethink this. Is it necessary? Any faster way of doing
+        #  this?
         while self.running:
-            with self._connected_clients_lock:
+            with self._connections_lock:
                 # Create a shallow copy of the list because of the
                 # for loop.
-                for client_object in self._connected_clients[:]:
-                    if not client_object.running:
-                        self._connected_clients.remove(client_object)
+                for connection in self._connections[:]:
+                    if not connection.running:
+                        self._connections.remove(connection)
 
     def start(self):
         """
         Start the server.
         """
         # maybe use a dict like {user:client}
-        self._connected_clients = []
-        self._users = []
-        self._clients = []
+        self._users = {}
+        self._connections = []
         self._users_database = UsersDatabase("users.db")
         self._server_socket = socket.socket()
         self._server_socket.settimeout(TIMEOUT)
         self._server_socket.bind(SERVER_ADDRESS)
         self._server_socket.listen()  # TODO: Add parameter here.
-        self._connect_clients_thread = threading.Thread(
-            target=self._connect_clients)
-        self._remove_closed_clients_thread = threading.Thread(
-            target=self._remove_closed_clients)
+        self._connect_connections_thread = threading.Thread(
+            target=self._connect_connections)
+        self._remove_closed_connections_thread = threading.Thread(
+            target=self._remove_closed_connections)
         self._set_running(True)
-        self._connect_clients_thread.start()
-        self._remove_closed_clients_thread.start()
+        self._connect_connections_thread.start()
+        self._remove_closed_connections_thread.start()
 
     def close(self, block=True):
         """
@@ -190,15 +223,8 @@ class Server(object):
         """
         self._set_running(False)
         if block:
-            self._connect_clients_thread.join()
-            self._remove_closed_clients_thread.join()
-        # TODO: Make sure all clients are closed before calling close
+            self._connect_connections_thread.join()
+            self._remove_closed_connections_thread.join()
+        # TODO: Make sure all connections are closed before calling close
         #  on server socket
         self._server_socket.close()
-
-
-if __name__ == "__main__":
-    a = Server()
-    a.start()
-    input()
-    a.close()

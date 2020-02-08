@@ -6,7 +6,7 @@ __author__ = "Ron Remets"
 
 from kivy.app import App
 from kivy.lang import Builder
-from kivy.properties import BooleanProperty, ObjectProperty
+from kivy.properties import ObjectProperty
 
 
 # noinspection PyUnresolvedReferences

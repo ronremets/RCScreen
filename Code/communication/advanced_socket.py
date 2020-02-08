@@ -17,7 +17,7 @@ class AdvancedSocket(object):
     """
     Wrapper for socket for use in the front end.
     """
-    def __init__(self, address):
+    def __init__(self, address=None):
         self._address = address
         self._socket = None
         self._recv_thread = None

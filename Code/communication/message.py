@@ -4,6 +4,8 @@ A message for communicating through sockets
 
 __author__ = "Ron Remets"
 
+import communication_protocol
+
 # The length of the length of the message content
 MESSAGE_LENGTH_LENGTH = 16
 MESSAGE_TYPE_LENGTH = 1  # The length of the type of the message
@@ -43,3 +45,9 @@ class Message(object):
             raise ValueError(f"Message type can not be longer than"
                              f" {MESSAGE_TYPE_LENGTH}")
         self.__message_type = value
+
+    def get_content_as_text(self):
+        """
+        :return: The content decoded as text
+        """
+        return self.content.decode(communication_protocol.ENCODING)

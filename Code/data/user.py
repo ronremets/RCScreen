@@ -1,5 +1,7 @@
 """
 A class to store user data
+TODO: Is this even necessary? The user database functions can not just
+  crash/return True and False/other way?
 """
 
 __author__ = "Ron Remets"

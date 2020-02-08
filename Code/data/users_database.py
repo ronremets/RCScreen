@@ -72,6 +72,20 @@ class UsersDatabase(object):
             "WHERE username = ? and password = ?",
             (user.username, user.password))
 
+    def get_all_usernames(self):
+        """
+        Get the usernames of all users in th database.
+        :return: A list of all the usernames.
+        """
+        self._cursor.execute("SELECT username FROM users")
+        usernames = self._cursor.fetchall()
+        if usernames is not None:
+            return [*usernames]
+        # TODO: remove the print and check if [*usernames] can work for
+        #  all cases
+        print("None found")
+        return []
+
     def close(self):
         """
         Close th database.
