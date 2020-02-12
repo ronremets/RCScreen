@@ -5,6 +5,8 @@ a database class for users
 __author__ = "Ron Remets"
 
 import traceback
+import threading
+import queue
 
 import sqlite3
 
@@ -16,10 +18,29 @@ class UsersDatabase(object):
     A database class for users
     """
     def __init__(self, db_file_name):
+        self._connection = None
+        self._cursor = None
+        self._running_lock = threading.Lock()
+        self._queries_lock = threading.Lock()
+        self._results_lock = threading.Lock()
+        self._queries = queue.Queue()
+        self._results = queue.Queue()
+        self._database_thread = threading.Thread(
+            target=self._handle_queries, args=(db_file_name,))
+        self._database_thread.start()
+
+    @property
+    def running(self):
+        with self._running_lock:
+            return self.__running
+
+    def _set_running(self, value):
+        self.__running = value
+
+    def _connect_to_database(self, db_file_name):
         try:
             self._connection = sqlite3.connect(db_file_name)
             self._cursor = self._connection.cursor()
-
             self._cursor.execute(
                 'SELECT name FROM sqlite_master WHERE type = "table"')
             tables = self._cursor.fetchall()
@@ -27,15 +48,16 @@ class UsersDatabase(object):
             if "users" not in map(lambda x: x[0], tables):
                 self._cursor.execute(
                     "CREATE TABLE users\n"
-                    "(id int AUTOINCREMENT(10),"
+                    "(id int,"
                     " username text UNIQUE,"
                     " password text,"
                     " PRIMARY KEY(id))\n")
             self._connection.commit()
-        except Exception as e:
-            print("Error:" + str(e))
+        except Exception:
+            print("Database error:")
+            traceback.print_exc()
 
-    def add_user(self, username, password):
+    def _add_user(self, username, password):
         """
         Add a user to the database. Only a unique username is allowed.
         :param username: The username of the user.
@@ -46,7 +68,7 @@ class UsersDatabase(object):
             "VALUES (?, ?)", (username, password))
         self._connection.commit()
 
-    def get_user(self, username, password):
+    def _get_user(self, username, password):
         """
         Get a user's details from the database.
         :param username: The username of the user.
@@ -62,7 +84,7 @@ class UsersDatabase(object):
             raise ValueError("No such user")
         return User(result[0], result[1])
 
-    def delete_user(self, user):
+    def _delete_user(self, user):
         """
         Delete a user from the database.
         :param user: The user to delete.
@@ -72,7 +94,7 @@ class UsersDatabase(object):
             "WHERE username = ? and password = ?",
             (user.username, user.password))
 
-    def get_all_usernames(self):
+    def _get_all_usernames(self):
         """
         Get the usernames of all users in th database.
         :return: A list of all the usernames.
@@ -86,8 +108,38 @@ class UsersDatabase(object):
         print("None found")
         return []
 
-    def close(self):
+    def _user_exists(self, username):
         """
-        Close th database.
+        CHeck if a user exists
+        :param username: The username of the user
+        :return: True if exists False otherwise
+        """
+        self._cursor.execute("SELECT username FROM users\n"
+                             "WHERE username = ?", (username,))
+        return self._cursor.fetchone() is None
+
+    def _close(self):
+        """
+        Close the database.
         """
         self._connection.close()
+
+    def _add_command(self, command):
+        with self._queries_lock:
+            self._queries.put(command)
+
+    def _handle_queries(self, db_file_name):
+        """
+        The main loop of the database object. Get and handle queries.
+        """
+        self._connect_to_database(db_file_name)
+        self._set_running(True)
+        while self.running:
+            with self._queries_lock:
+                index, action, args = self._queries.get()
+                result = action(*args)
+
+
+
+
+

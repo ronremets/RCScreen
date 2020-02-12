@@ -65,7 +65,7 @@ class MessageBuffer(object):
                 if not self._messages.empty():
                     # no dead lock because otherwise it would not
                     # enter the if
-                    return self._messages.pop(block=True)
+                    return self._messages.get(block=True)
                 return None
             if self._messages is None:
                 return None

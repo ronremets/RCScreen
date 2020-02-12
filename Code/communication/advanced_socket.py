@@ -45,6 +45,7 @@ class AdvancedSocket(object):
         while self.running:
             self._messages_received.add(communication_protocol.recv_message(
                 self._socket))
+            print("did it")
 
     def _send_messages(self):
         """
@@ -73,12 +74,16 @@ class AdvancedSocket(object):
         """
         self._messages_to_send.add(message)
 
-    def recv(self):
+    def recv(self, block=True):
         """
         Receive a message from the other side
+        :param block: Block until recv successful
         :return: The message.
         """
-        return self._messages_received.pop()
+        message_received = self._messages_received.pop()
+        while block and message_received is None:
+            message_received = self._messages_received.pop()
+        return message_received
 
     def start(self, input_is_buffered, output_is_buffered, client_socket=None):
         """

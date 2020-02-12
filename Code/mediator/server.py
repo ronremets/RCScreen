@@ -8,7 +8,7 @@ __author__ = "Ron Remets"
 import socket
 import threading
 
-from mediator.user import User
+from user import User
 from communication.message import Message, MESSAGE_TYPES
 from communication import communication_protocol
 from communication.advanced_socket import AdvancedSocket
@@ -59,15 +59,8 @@ class Server(object):
             params = connection.socket.recv().get_content_as_text().split("\n")
             if params[0] == "set partner":
                 partner_username = params[1]
-                # TODO: check if partner exists
-                if self._users_database.user_exists(partner_username):
-                    #  TODO: Maybe add a thread to do this in order to
-                    #   not block this thread
-                    pass
-
-                # TODO: check if partner online
-                #  have a partner object from user dict
-                #  set user.partner to the partner
+                with self._users_lock:
+                    user.partner = self._users[partner_username]
             elif params[0] == "get all usernames":
                 connection.send(Message(
                     MESSAGE_TYPES["server interaction"],
@@ -79,10 +72,18 @@ class Server(object):
             #  user and more
 
     def _run_buffered(self, connection, user):
-        pass  # TODO: write this
+        while self.running:
+            user.partner.socket.send(Message(
+                MESSAGE_TYPES["controller"],
+                connection.socket.recv().encode(
+                    communication_protocol.ENCODING)))
 
     def _run_unbuffered(self, connection, user):
-        pass  # TODO: write this
+        while self.running:
+            user.partner.socket.send(Message(
+                MESSAGE_TYPES["controlled"],
+                connection.socket.recv().encode(
+                    communication_protocol.ENCODING)))
 
     def _join_connection(self, connection, username, password):
         with self._connections_lock:
@@ -131,7 +132,8 @@ class Server(object):
         connection_advanced_socket.start(True, True, connection_socket)
         connecting_method = connection_advanced_socket.recv(
             ).get_content_as_text()
-        connection_info = connection_socket.recv(
+        print("cm:" + connecting_method)
+        connection_info = connection_advanced_socket.recv(
             ).get_content_as_text().split("\n")
         if connecting_method == "login":
             connection, user = self._login(

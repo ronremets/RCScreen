@@ -6,7 +6,7 @@ __author__ = "Ron Remets"
 
 from kivy.app import App
 from kivy.lang import Builder
-from kivy.properties import ObjectProperty
+from kivy.properties import ObjectProperty, StringProperty
 
 
 # noinspection PyUnresolvedReferences
@@ -19,7 +19,8 @@ class RCScreenApp(App):
     """
     Responsible for the whole client's application.
     """
-    user = ObjectProperty(None)
+    username = StringProperty()
+    password = StringProperty()
     connection = ObjectProperty(None)
 
     def build(self):

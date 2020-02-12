@@ -33,7 +33,8 @@ class Message(object):
         if len(value) > 10 ** MESSAGE_LENGTH_LENGTH:
             raise ValueError(f"Message can not be longer than"
                              f" {MESSAGE_LENGTH_LENGTH}")
-        self.__content = value@property
+        self.__content = value
+
 
     @property
     def message_type(self):

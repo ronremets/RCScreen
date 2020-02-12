@@ -24,7 +24,7 @@ def _pack_message(message):
                 MESSAGE_LENGTH_LENGTH).encode(ENCODING)
             + str(message.message_type).zfill(
                 MESSAGE_TYPE_LENGTH).encode(ENCODING)
-            + message.content)
+            + packed_content)
     return packet
 
 
@@ -54,9 +54,10 @@ def recv_message(socket):
     :return: The packet in bytes
     :raise RuntimeError: If socket is closed from the other side.
     """
-    message_type = _recv_fixed_length_data(socket, MESSAGE_TYPE_LENGTH)
     length = int(_recv_fixed_length_data(socket, MESSAGE_LENGTH_LENGTH))
+    message_type = _recv_fixed_length_data(socket, MESSAGE_TYPE_LENGTH)
     content = lz4.frame.decompress(_recv_fixed_length_data(socket, length))
+    print("content: " + content.decode(ENCODING))
     return Message(message_type, content)
 
 

@@ -12,11 +12,13 @@ class User(object):
     A user which is a collection of clients
     """
     def __init__(self, username, password):
-        self.__connections = []
+        self._connections_lock = threading.Lock()
+        self._partner_lock = threading.Lock()
+        with self._connections_lock:  # TODO: is this necessary?
+            self.__connections = []
         self.username = username
         self.password = password
         self.partner = None
-        self._connections_lock = threading.Lock()
 
     @property
     def connections(self):
@@ -28,3 +30,13 @@ class User(object):
         """
         with self._connections_lock:
             return self.__connections  # TODO: maybe make it private
+
+    @property
+    def partner(self):
+        with self._partner_lock:
+            return self.__partner
+
+    @partner.setter
+    def partner(self, value):
+        with self._partner_lock:
+            self.__partner = value
