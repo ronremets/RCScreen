@@ -8,7 +8,7 @@ __author__ = "Ron Remets"
 import socket
 import threading
 
-from user import User
+from mediator.user import User
 from communication.message import Message, MESSAGE_TYPES
 from communication import communication_protocol
 from communication.advanced_socket import AdvancedSocket

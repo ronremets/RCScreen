@@ -18,8 +18,10 @@ class UsersDatabase(object):
     A database class for users
     """
     def __init__(self, db_file_name):
+        self._command_index = 0
         self._connection = None
         self._cursor = None
+        self._command_index_lock = threading.Lock()
         self._running_lock = threading.Lock()
         self._queries_lock = threading.Lock()
         self._results_lock = threading.Lock()
@@ -124,6 +126,12 @@ class UsersDatabase(object):
         """
         self._connection.close()
 
+    def add_user(self, username, password):
+        with self._command_index_lock:
+            index = self._command_index
+            self._command_index += 1
+        self._add_command((index, self._add_user, (username, password)))
+
     def _add_command(self, command):
         with self._queries_lock:
             self._queries.put(command)
@@ -137,7 +145,9 @@ class UsersDatabase(object):
         while self.running:
             with self._queries_lock:
                 index, action, args = self._queries.get()
-                result = action(*args)
+            result = action(*args)
+            with self._results_lock:
+                self._results.put(result)
 
 
 
