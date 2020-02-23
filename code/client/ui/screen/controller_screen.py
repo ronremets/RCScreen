@@ -12,7 +12,7 @@ from kivy.properties import ObjectProperty, BooleanProperty, StringProperty
 from kivy.uix.image import CoreImage
 from kivy.clock import Clock
 
-from Code.client import screen_recorder
+from client import screen_recorder
 
 app = App.get_running_app()
 

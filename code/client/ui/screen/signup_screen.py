@@ -8,7 +8,7 @@ from kivy.app import App
 from kivy.uix.screenmanager import Screen
 from kivy.properties import ObjectProperty
 
-from main import SERVER_ADDRESS
+from client.main import SERVER_ADDRESS
 from communication.advanced_socket import AdvancedSocket
 from communication.message import Message, MESSAGE_TYPES
 from communication import communication_protocol
@@ -31,7 +31,7 @@ class SignupScreen(Screen):
         Signup to the server.
         :param _: The touch object (not used)
         """
-        print("bla bla bla")
+        print("signing in")
         app = App.get_running_app()
         app.username = self.username_text_input.text
         app.password = self.password_text_input.text
@@ -44,5 +44,5 @@ class SignupScreen(Screen):
             MESSAGE_TYPES["server interaction"],
             (app.username + "\n" + app.password + "\nmain").encode(
                 communication_protocol.ENCODING)))
-        print("blo blo blo")
+        print("finished signing in")
         return True

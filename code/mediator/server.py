@@ -26,16 +26,15 @@ class Server(object):
     """
     Handles all communication between clients.
     """
-    def __init__(self):
+    def __init__(self, db_file_name):
+        self._db_file_name = db_file_name
         self._server_socket = None
         self._connections = None
         self._users = None
-        self._users_database = None
         self._connect_connections_thread = None
         self._remove_closed_connections_thread = None
         self._running_lock = threading.Lock()
         self._connections_lock = threading.Lock()
-        self._users_database_lock = threading.Lock()
         self._users_lock = threading.Lock()
         self._set_running(False)
 
@@ -85,7 +84,8 @@ class Server(object):
                 connection.socket.recv().encode(
                     communication_protocol.ENCODING)))
 
-    def _join_connection(self, connection, username, password):
+    def _join_connection(
+            self, connection, username, password, database_connection):
         with self._connections_lock:
             self._connections.append(connection)
 
@@ -99,28 +99,46 @@ class Server(object):
                 self._users[username] = user
         return user
 
-    def _login(self, connection_socket, connection_info):
+    def _login(
+            self,
+            connection_socket,
+            connection_info,
+            database_connection=None):
         """
         Login a socket
         :param connection_socket: The socket to login
         :param connection_info: info used to login
+        :param database_connection: If available, a connection mad in
+                                    the same thread
         :return: Connection object and its user
         """
         username = connection_info[0]
         password = connection_info[1]
-        # TODO: add something like logging in here
-        self._users_database.get_user(username, password)
         connection_type = connection_info[2]
-        connection = Connection(connection_socket, connection_type)
-        user = self._join_connection(connection, username, password)
+        if database_connection is None:
+            database_connection = UsersDatabase(self._db_file_name)
+        # TODO: add something like logging in here
+        print(database_connection.get_user(username, password))
+
+        connection = Connection(
+            connection_socket, connection_type, database_connection)
+        user = self._join_connection(
+            connection,
+            username,
+            password,
+            database_connection)
         return connection, user
 
     def _signup(self, connection_socket, connection_info):
         username = connection_info[0]
         password = connection_info[1]
+        database_connection = UsersDatabase(self._db_file_name)
         # TODO: add something like logging in here
-        self._users_database.add_user(username, password)
-        return self._login(connection_socket, connection_info)
+        database_connection.add_user(username, password)
+        return self._login(
+            connection_socket,
+            connection_info,
+            database_connection=database_connection)
 
     def _create_connection(self, connection_socket):
         """
@@ -204,7 +222,7 @@ class Server(object):
         # maybe use a dict like {user:client}
         self._users = {}
         self._connections = []
-        self._users_database = UsersDatabase("users.db")
+        #self._users_database = UsersDatabase("users.db")
         self._server_socket = socket.socket()
         self._server_socket.settimeout(TIMEOUT)
         self._server_socket.bind(SERVER_ADDRESS)
@@ -216,6 +234,7 @@ class Server(object):
         self._set_running(True)
         self._connect_connections_thread.start()
         self._remove_closed_connections_thread.start()
+        print("done starting server")
 
     def close(self, block=True):
         """

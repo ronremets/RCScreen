@@ -11,7 +11,8 @@ class Connection(object):
     """
     Represents a session connected to a user
     """
-    def __init__(self, connection_socket, connection_type):
+    def __init__(self, connection_socket, connection_type, db_connection):
+        self.db_connection = db_connection
         self.socket = connection_socket
         self.type = connection_type
         self._running_lock = threading.Lock()

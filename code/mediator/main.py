@@ -5,7 +5,10 @@ The entry point for the backend server.
 __author__ = "Ron Remets"
 
 from server import Server
+from users_database import UsersDatabase
 import traceback
+
+DB_FILE_NAME = "users.db"
 
 
 def main():
@@ -14,7 +17,8 @@ def main():
     """
     server = None
     try:
-        server = Server()
+        UsersDatabase.create_database(DB_FILE_NAME)
+        server = Server(DB_FILE_NAME)
         server.start()
         input()
     except Exception as e:

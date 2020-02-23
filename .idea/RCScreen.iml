@@ -4,15 +4,15 @@
     <content url="file://$MODULE_DIR$">
       <sourceFolder url="file://$MODULE_DIR$/Code/controller" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/Code/controlled" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/Code/mediator" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/Code/client" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/code/mediator" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/code/client" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/Code/client/communication" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/Code/client/ui" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/Code/communication" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/Code" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/Code/client/ui/popup" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/Code/client/ui/screen" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/Code/data" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/code/client/ui" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/code/communication" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/code" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/code/client/ui/popup" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/code/client/ui/screen" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/code/data" isTestSource="false" />
     </content>
     <orderEntry type="jdk" jdkName="Python 3.7" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
