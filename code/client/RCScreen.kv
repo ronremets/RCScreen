@@ -101,9 +101,11 @@ WindowManager:
 
 <ConnectScreen>:
     name: "connect"
+    refresh_button: refresh_button
+    users_grid: users_grid
     controller_checkbox: controller_checkbox
-    other_code_text_input: other_code_text_input
-    code_text_input: code_text_input
+    partner_text_input: partner_text_input
+    partner_label: partner_label
     GridLayout:
         size: root.size
         pos: root.pos
@@ -115,18 +117,41 @@ WindowManager:
         spacing: (self.height / self.rows) * 0.2
 
         DynamicLabel:
-            text: "Your code: "
+            id: partner_label
+            text: "Partner:"
 
         TextInput:
-            id: code_text_input
-            text: "0"
+            id: partner_text_input
+            text: ""
 
-        DynamicLabel:
-            text: "Enter code:"
+        GridLayout:
+            id: users_grid
+            size: root.size
+            pos: root.pos
+            rows: 1
+            cols: 1
+            padding:
+                ((self.width / self.cols) * 0.25,
+                (self.height / self.rows) * 0.2)
+            spacing: (self.height / self.rows) * 0.2
+            DynamicLabel:
+                text: "usernames"
 
-        TextInput:
-            id: other_code_text_input
-            text: "1"
+        #DynamicButton:
+        #    id: dat_boy
+        #    text: "username"
+        #    on_press:
+        #        root.create_dropdown()
+        #        root.usernames_dropdown.open(self)
+            #DropDown:
+            #    id: usernames_dropdown
+
+        DynamicButton:
+            id: refresh_button
+            text: "Refresh"
+            on_press:
+                root.create_grid()
+
 
         DynamicButton:
             text: "Connect"

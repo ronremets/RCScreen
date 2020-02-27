@@ -21,7 +21,18 @@ class RCScreenApp(App):
     """
     username = StringProperty()
     password = StringProperty()
-    connection = ObjectProperty(None)
+    connections = ObjectProperty(dict())
+
+    def add_connection(self, address, name, buffer_state):
+        """
+        Add a connection to app. Only call this after sign in or log in.
+        :param address: The address to connect to
+        :param name: The name of the connection
+        :param buffer_state: a tuple like
+               (input is buffered, output is buffered)
+        """
+        # TODO: add a way to add connections
+        # TODO: connect with token you get in log in
 
     def build(self):
         """

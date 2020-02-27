@@ -61,9 +61,16 @@ class Server(object):
                 with self._users_lock:
                     user.partner = self._users[partner_username]
             elif params[0] == "get all usernames":
-                connection.send(Message(
+                connection.socket.send(Message(
                     MESSAGE_TYPES["server interaction"],
-                    self._users_database.get_all_usernames()))
+                    str(connection.db_connection.get_all_usernames()
+                        ).encode(communication_protocol.ENCODING)))
+            elif params[0] == "get all connected usernames":
+                with self._users_lock:
+                    usernames = [*self._users.keys()]
+                connection.socket.send(Message(
+                    MESSAGE_TYPES["server interaction"],
+                    str(usernames).encode(communication_protocol.ENCODING)))
             else:
                 pass  # TODO: Add errors here
             # TODO: Add more commands like closing other connections of
@@ -72,14 +79,14 @@ class Server(object):
 
     def _run_buffered(self, connection, user):
         while self.running:
-            user.partner.socket.send(Message(
+            user.partner.connections[connection.type].socket.send(Message(
                 MESSAGE_TYPES["controller"],
                 connection.socket.recv().encode(
                     communication_protocol.ENCODING)))
 
     def _run_unbuffered(self, connection, user):
         while self.running:
-            user.partner.socket.send(Message(
+            user.partner.connections[connection.type].socket.send(Message(
                 MESSAGE_TYPES["controlled"],
                 connection.socket.recv().encode(
                     communication_protocol.ENCODING)))

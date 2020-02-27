@@ -35,7 +35,6 @@ class Message(object):
                              f" {MESSAGE_LENGTH_LENGTH}")
         self.__content = value
 
-
     @property
     def message_type(self):
         return self.__message_type

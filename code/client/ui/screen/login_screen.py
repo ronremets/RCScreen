@@ -34,14 +34,17 @@ class LoginScreen(Screen):
         app = App.get_running_app()
         app.username = self.username_text_input.text
         app.password = self.password_text_input.text
-        app.connection = AdvancedSocket(SERVER_ADDRESS)
-        app.connection.start(True, True)
-        app.connection.send(Message(
+        app.connections["main"] = AdvancedSocket(SERVER_ADDRESS)
+        app.connections["main"].start(True, True)
+        app.connections["main"].send(Message(
             MESSAGE_TYPES["server interaction"],
             "login".encode(communication_protocol.ENCODING)))
-        app.connection.send(Message(
+        app.connections["main"].send(Message(
             MESSAGE_TYPES["server interaction"],
             (app.username + "\n" + app.password + "\nmain").encode(
                 communication_protocol.ENCODING)))
         print("finished logging in")
-        return True
+        print(app.connections["main"].recv().get_content_as_text())
+        # if logged_in:
+        self.manager.transition.direction = "up"
+        app.root.current = "main"
