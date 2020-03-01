@@ -17,10 +17,6 @@ class UsersDatabase(object):
     def __init__(self, db_file_name):
         self._connection = sqlite3.connect(db_file_name)
         self._cursor = self._connection.cursor()
-        self._running_lock = threading.Lock()
-        #self._database_thread = threading.Thread(
-        #    target=self._handle_queries, args=(db_file_name,))
-        #self._database_thread.start()
 
     @staticmethod
     def create_database(db_file_name):

@@ -35,17 +35,8 @@ class SignupScreen(Screen):
         app = App.get_running_app()
         app.username = self.username_text_input.text
         app.password = self.password_text_input.text
-        app.connections["main"] = AdvancedSocket(SERVER_ADDRESS)
-        app.connections["main"].start(True, True)
-        app.connections["main"].send(Message(
-            MESSAGE_TYPES["server interaction"],
-            "signup".encode(communication_protocol.ENCODING)))
-        app.connections["main"].send(Message(
-            MESSAGE_TYPES["server interaction"],
-            (app.username + "\n" + app.password + "\nmain").encode(
-                communication_protocol.ENCODING)))
-        print("finished signing in")
-        print(app.connections["main"].recv())
+        app.add_connection("main", (True, True), "main", method="signup")
+        print("signed up")
         # if logged_in:
         self.manager.transition.direction = "up"
         app.root.current = "main"

@@ -26,14 +26,21 @@ class ConnectScreen(Screen):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self._refresh_event = None
         self._connected_users_lock = threading.Lock()
         self._all_users_lock = threading.Lock()
         self._connected_users = []
         self._all_users = []
-        Clock.schedule_event(self.refresh_users, 5)
+        # Clock.schedule_event(self.refresh_users, 5)
         # TODO: add one socket for users update and for one for
         #  set partner and connect
         # TODO: just use more sockets
+
+    def on_enter(self):
+        self._refresh_event = Clock.schedule_interval(self.refresh_users, 5)
+
+    def on_leave(self):
+        self._refresh_event.cancel()
 
     def update_users(self):
         """
@@ -87,14 +94,20 @@ class ConnectScreen(Screen):
         """
         Create the drop down that shows users
         """
-        print("much before child:" + str(self.users_grid.children))
+        """print("much before child:" + str(self.users_grid.children))
         connected_users = self.get_active_usernames()[1:-1].split(", ")
         print(f"connected users: {connected_users}")
         all_users = self.get_all_usernames()[1:-1].split(", ")
         disconnected_users = filter(
             lambda username: username not in connected_users, all_users)
         #self.enable = False
-        #self.enable = True
+        #self.enable = True"""
+        with self._connected_users_lock:
+            connected_users = self._connected_users
+        with self._all_users_lock:
+            all_users = self._all_users
+        disconnected_users = filter(
+            lambda username: username not in connected_users, all_users)
         self.users_grid.clear_widgets()
         print("before child:" + str(self.users_grid.children))
         for username in connected_users:
