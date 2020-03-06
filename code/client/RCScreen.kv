@@ -157,6 +157,7 @@ WindowManager:
             text: "Connect"
             on_press:
                 app.is_controller = root.controller_checkbox.active
+                root.connect_to_partner()
                 root.manager.transition.direction = "left"
                 app.root.current = "controller"
 
@@ -318,8 +319,9 @@ WindowManager:
     screen: screen
     name: "controller"
 
-    StreamedImage:
+    Image:
         id: screen
+        source: ""
 
     DynamicButton:
         background_color: 1, 1, 1, 0.5

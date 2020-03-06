@@ -60,6 +60,10 @@ class Server(object):
                 partner_username = params[1]
                 with self._users_lock:
                     user.partner = self._users[partner_username]
+                connection.socket.send(Message(
+                    MESSAGE_TYPES["server interaction"],
+                    "set partner".encode(communication_protocol.ENCODING)))
+                print("setted partener to :" + str(partner_username))
             elif params[0] == "get all usernames":
                 connection.socket.send(Message(
                     MESSAGE_TYPES["server interaction"],
@@ -78,31 +82,43 @@ class Server(object):
             #  user and more
 
     def _run_buffered(self, connection, user):
+        print("starting buffered")
         while self.running:
-            user.partner.connections[connection.type].socket.send(Message(
-                MESSAGE_TYPES["controller"],
-                connection.socket.recv().encode(
-                    communication_protocol.ENCODING)))
+            # TODO: wait until partner has connection and then start
+            #  ie, never do an infinite loop that does not do anything
+            if connection.name in user.partner.connections:
+                if user.partner.connections[connection.name].running: # TODO: FIX THIS WTF WHY
+                    user.partner.connections[connection.name].socket.send(Message(
+                        MESSAGE_TYPES["controller"],
+                        connection.socket.recv().content))
 
     def _run_unbuffered(self, connection, user):
+        print("starting unbuffered")
         while self.running:
-            user.partner.connections[connection.type].socket.send(Message(
-                MESSAGE_TYPES["controlled"],
-                connection.socket.recv().encode(
-                    communication_protocol.ENCODING)))
+            if connection.name in user.partner.connections:
+                # TODO: second if can crash!!! needs a lock what if the
+                #  connection was remove before second if?
+                if user.partner.connections[connection.name].running:
+                    user.partner.connections[connection.name].socket.send(Message(
+                        MESSAGE_TYPES["controlled"],
+                        connection.socket.recv().content))
 
     def _join_connection(
             self, connection, username, password, database_connection):
+        # TODO: go over the parameters to this function because the
+        #  program works and not all parameters are used
         with self._connections_lock:
             self._connections.append(connection)
 
         with self._users_lock:
-            if username in self._users:  # TODO: Maybe .keys() ?
+            if username in self._users.keys():  # TODO: Maybe .keys() ?
                 user = self._users[username]
-                user.connections.append(connection)
+                user.connections[connection.name] = connection
+                # TODO: I dont think this code is safe what if the = connection
+                #  part happened in 2 threads?
             else:
                 user = User(username, password)
-                user.connections.append(connection)
+                user.connections[connection.name] = connection
                 self._users[username] = user
         return user
 
@@ -115,20 +131,24 @@ class Server(object):
         Login a socket
         :param connection_socket: The socket to login
         :param connection_info: info used to login
-        :param database_connection: If available, a connection mad in
+        :param database_connection: If available, a connection made in
                                     the same thread
         :return: Connection object and its user
         """
         username = connection_info[0]
         password = connection_info[1]
         connection_type = connection_info[2]
+        connection_name = connection_info[3]
         if database_connection is None:
             database_connection = UsersDatabase(self._db_file_name)
         # TODO: add something like logging in here
         print(database_connection.get_user(username, password))
 
         connection = Connection(
-            connection_socket, connection_type, database_connection)
+            connection_name,
+            connection_socket,
+            connection_type,
+            database_connection)
         user = self._join_connection(
             connection,
             username,
@@ -157,7 +177,7 @@ class Server(object):
         connection_advanced_socket.start(True, True, connection_socket)
         connecting_method = connection_advanced_socket.recv(
             ).get_content_as_text()
-        print("cm:" + connecting_method)
+        print("connecting method: " + connecting_method)
         connection_info = connection_advanced_socket.recv(
             ).get_content_as_text().split("\n")
         if connecting_method == "login":
@@ -173,6 +193,9 @@ class Server(object):
         connection.socket.send(Message(
             MESSAGE_TYPES["server interaction"],
             "Connected".encode(communication_protocol.ENCODING)))
+        # make sure both switch state
+        print(connection.socket.recv().get_content_as_text()) #TODO: remove the print keep the recv
+        print("sent connected and starting connection")
         return connection, user
 
     def _run_connection(self, connection_socket):
@@ -181,14 +204,21 @@ class Server(object):
         :param connection_socket: the socket of the connection
         """
         connection, user = self._create_connection(connection_socket)
+        print("gonna do my job")
         # TODO: fix: getpeerbyname might not be supported on all systems
         if connection.type == "main":
+            connection.start()
             self._run_main(connection, user)
-        elif connection.type in ("frame", "sound", "mouse move"):
+        elif connection.type in ("frame - sender", "sound", "mouse move"):
+            # TODO: put in dict and add connections with different client and server buffering
+            print("found unbuffered socket")
             connection.socket.switch_state(False, True)
+            connection.start()
             self._run_unbuffered(connection, user)
-        elif connection.type in ("keyboard", "mouse button"):
+        elif connection.type in ("keyboard", "mouse button", "frame - receiver"):
+            print("found buffered socket")
             connection.socket.switch_state(True, False)
+            connection.start()
             self._run_buffered(connection, user)
         connection.close()
 

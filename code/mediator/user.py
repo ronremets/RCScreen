@@ -15,7 +15,7 @@ class User(object):
         self._connections_lock = threading.Lock()
         self._partner_lock = threading.Lock()
         with self._connections_lock:  # TODO: is this necessary?
-            self.__connections = []
+            self.__connections = {}
         self.username = username
         self.password = password
         self.partner = None
@@ -23,10 +23,10 @@ class User(object):
     @property
     def connections(self):
         """
-        A getter for the client list
+        A getter for the client dict
         NOTE: THIS RETURNS A REFERENCE AND NOT A COPY. ANY CHANGES TO
-        THE RETURNED LIST WILL CHANGE THE ACTUAL LIST
-        :return: A reference to the clients list
+        THE RETURNED dict WILL CHANGE THE ACTUAL LIST
+        :return: A reference to the clients dict
         """
         with self._connections_lock:
             return self.__connections  # TODO: maybe make it private

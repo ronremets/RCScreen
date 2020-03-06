@@ -6,7 +6,7 @@ __author__ = "Ron Remets"
 
 import lz4.frame
 
-from message import Message, MESSAGE_LENGTH_LENGTH, MESSAGE_TYPE_LENGTH
+from message import Message, MESSAGE_LENGTH_LENGTH, MESSAGE_TYPE_LENGTH, MESSAGE_TYPES
 
 BUFFER_SIZE = 1024  # The buffer size used when receiving and sending.
 ENCODING = "ASCII"  # The encoding used in the protocol.
@@ -57,7 +57,13 @@ def recv_message(socket):
     length = int(_recv_fixed_length_data(socket, MESSAGE_LENGTH_LENGTH))
     message_type = _recv_fixed_length_data(socket, MESSAGE_TYPE_LENGTH)
     content = lz4.frame.decompress(_recv_fixed_length_data(socket, length))
-    print("content: " + content.decode(ENCODING))
+    try:
+        if length < 1000:
+            print("content: " + content.decode(ENCODING))
+        else:
+            print(f"content: {len(content)} bytes")
+    except UnicodeError:
+        print(f"bad content: {len(content)} bytes")
     return Message(message_type, content)
 
 

@@ -31,13 +31,16 @@ class MessageBuffer(object):
     def switch_state(self, buffered, maxsize=0):
         """
         Switch the state of the buffer. All current messages in the
-        buffer will be dropped.
+        buffer will be dropped unless state did not change
         :param buffered: The state of the buffer. See the init for
                          detail.
         :param maxsize: when buffered, how many messages to store. If
                         set to 0 then buffer forever.
         """
         with self._messages_lock:
+            if (self._buffered == buffered
+                    and maxsize == self._messages.maxsize):
+                return
             self._buffered = buffered
             if buffered:
                 self._messages = queue.Queue(maxsize=maxsize)
