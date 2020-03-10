@@ -15,6 +15,7 @@ WindowManager:
     FeedbackScreen:
     ConnectScreen:
     ControllerScreen:
+    ControlledScreen:
 
 
 <LoginScreen>:
@@ -159,7 +160,7 @@ WindowManager:
                 app.is_controller = root.controller_checkbox.active
                 root.connect_to_partner()
                 root.manager.transition.direction = "left"
-                app.root.current = "controller"
+                app.root.current = ("controller" if app.is_controller else "controlled")
 
         DynamicButton:
             text: "Back"
@@ -322,6 +323,19 @@ WindowManager:
     Image:
         id: screen
         source: ""
+
+    DynamicButton:
+        background_color: 1, 1, 1, 0.5
+        size: root.height / 10, root.height / 10
+        size_hint: None, None
+        pos: 0, root.height - self.height
+        text: "Back"
+        on_press:
+            root.manager.transition.direction = "right"
+            app.root.current = "connect"
+
+<ControlledScreen>
+    name: "controlled"
 
     DynamicButton:
         background_color: 1, 1, 1, 0.5

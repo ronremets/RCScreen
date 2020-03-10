@@ -7,6 +7,8 @@ __author__ = "Ron Remets"
 import threading
 import io
 import time
+import logging
+import win32api
 
 from kivy.app import App
 from kivy.uix.screenmanager import Screen
@@ -14,10 +16,12 @@ from kivy.properties import ObjectProperty, BooleanProperty, StringProperty
 from kivy.uix.image import CoreImage
 from kivy.clock import Clock
 
-from client import screen_recorder
+from client.mouse_movement_tracker import MouseMovementTracker
+from client.mouse_click_tracker import MouseClickTracker
 from communication.message import Message, MESSAGE_TYPES
+from communication.communication_protocol import ENCODING
 
-ctr = 0
+
 class ControllerScreen(Screen):
     """
     The screen where the client controls another client.
@@ -26,8 +30,15 @@ class ControllerScreen(Screen):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self._app = App.get_running_app()
+        self._frame = None
+        self._receive_frames_thread = None
         self._screen_update_event = None
-        self._screen_recorder = screen_recorder.ScreenRecorder()
+        self._frame_receiver_thread = None
+        self._mouse_movement_update_thread = None
+        self._frame_lock = threading.Lock()
+        self._mouse_movement_tracker = MouseMovementTracker()
+        # self._mouse_click_tracker = MouseClickTracker()
         self._running_lock = threading.Lock()
         self._set_running(False)
 
@@ -38,63 +49,102 @@ class ControllerScreen(Screen):
         :return: True if it is, otherwise False
         """
         with self._running_lock:
-            return self.__running
+            return self._running
 
     def _set_running(self, value):
         with self._running_lock:
-            self.__running = value
+            self._running = value
 
-    def _send_frame(self):
-        app = App.get_running_app()
+    def _receive_frame(self):
+        """
+        receive a frame and update self._frame
+        """
         while self.running:
-            frame = self._screen_recorder.frame
-            # It's None until other_client connects
-            if frame is not None:
-                app.connections["screen recorder"].send(Message(
-                    MESSAGE_TYPES["controlled"],
-                    frame))  # TODO: also do this in another thread
-            time.sleep(0.1)  # TODO: remove?
+            frame = self._app.connections["screen recorder"].recv().content
+            with self._frame_lock:
+                self._frame = frame
 
     def _update_screen(self, *_):
         """
         Update the screen.
         """
-        global ctr
-        ctr += 1
-        print(ctr,end="| ")
-        app = App.get_running_app()
-        image_bytes = app.connections["screen recorder"].recv().content  # TODO: do this in another thread
-        print(f"{{{len(image_bytes)}}}")
+        logging.debug("Updating controller screen")
+        # TODO: do this in another thread in another object maybe?
+        with self._frame_lock:
+            image_bytes = self._frame
         # It's None until other_client connects
         if image_bytes is not None:
+            logging.debug(f"Length of frame bytes: {len(image_bytes)}")
             image_data = io.BytesIO(image_bytes)
             image_data.seek(0)
-            # print("len of none is " + str(len(image_data)))
-            print(image_data)
             self.screen.texture = CoreImage(image_data, ext="png").texture
             self.screen.reload()
+        else:
+            logging.warning("OTHER USER NOT CONNECTED")
+
+    def _send_mouse_position(self):
+        """
+        Send the mouse position
+        """
+        while self.running:
+            position = self._mouse_movement_tracker.current_position
+            # It's None until tracking starts
+            if position is not None:
+                self._app.connections["mouse movement tracker"].send(Message(
+                    MESSAGE_TYPES["controller"],
+                    str(position).encode(ENCODING)))
+            time.sleep(5)  # TODO: remove?
+
+    def _send_mouse_buttons_state(self):
+        """
+        Sends the state of the buttons of the mouse
+        """
+        while self.running:
+            buttons_state = self._mouse_click_tracker.buttons_state
+            # It's None until tracking starts
+            if buttons_state is not None:
+                self._app.connections["mouse movement tracker"].send(Message(
+                    MESSAGE_TYPES["controlled"],
+                    buttons_state))
+            time.sleep(1)  # TODO: remove?
 
     def on_enter(self, *args):
         """
         When this screen starts, start showing the screen.
         """
-        app = App.get_running_app()
-        # app.add_connection("screen recorder", (True, False), "frame")
-        print("creating connection")
+        logging.info("Creating screen recorder connection")
         self._set_running(True)
-        if app.is_controller:  # TODO: think of a better name maybe put in dict
-            app.add_connection("screen recorder", (True, False), "frame - sender")
-            print("starting screen recorder")
-            self._screen_recorder.start()
-            print("starting updates")
-            self._screen_update_event = threading.Thread(
-                target=self._send_frame)
-            self._screen_update_event.start()
-        else:
-            app.add_connection("screen recorder", (False, True), "frame - receiver")
-            print("starting updates")
-            self._screen_update_event = Clock.schedule_interval(
-                self._update_screen, 0)
+        self._app.add_connection(
+            "screen recorder",
+            (False, True),
+            "frame - receiver")
+        logging.info("Creating mouse movement tracker connection")
+        self._app.add_connection(
+            "mouse movement tracker",
+            (True, False),
+            "mouse movement - sender")
+        # logging.info("Creating mouse click tracker connection")
+        # self._app.add_connection(
+        #     "mouse click tracker",
+        #     (True, False),
+        #     "mouse click - sender")
+        logging.info("Starting mouse movement tracker")
+        self._mouse_movement_tracker.start()
+        # logging.info("Starting mouse click tracker")
+        # self._mouse_click_tracker.start()
+        logging.info("Starting updates")
+        self._receive_frames_thread = threading.Thread(
+            target=self._receive_frame)
+        self._screen_update_event = Clock.schedule_interval(
+            self._update_screen, 0)
+        self._mouse_movement_update_thread = threading.Thread(
+            target=self._send_mouse_position)
+        # self._mouse_movement_update_thread = threading.Thread(
+        #     target=self._send_mouse_buttons_state)
+        self._receive_frames_thread.start()
+        self._mouse_movement_update_thread.start()
+        # self._mouse_click_update_thread.start()
+        logging.info("Started updates")
 
     def on_leave(self, *args):
         """
@@ -102,12 +152,17 @@ class ControllerScreen(Screen):
         """
         app = App.get_running_app()
         self._set_running(False)
-        if app.is_controller:
-            self._screen_update_event.cancel()
-        else:
-            self._screen_update_event.join()  # TODO: blocking main thread here, add timeout or kill or something
+        self._screen_update_event.cancel()
+        self._receive_frames_thread.join()
+        self._mouse_movement_update_thread.join()
+        # self._mouse_click_update_thread.join()
         try:
-            app.connection.close(kill=True)  # TODO: change kill to False
+            # TODO: change kill to False
+            app.connections["screen recorder"].close(kill=True)
+            app.connections["mouse movement tracker"].close(kill=True)
+            # self._app.connections["mouse click tracker"].close(kill=True)
         except Exception as e:
-            print("socket error while closing: " + str(e))
-        self._screen_recorder.close()
+            logging.error(f"socket error while closing screen recorder: {e}")
+        finally:
+            self._mouse_movement_tracker.close()
+            # self._mouse_click_tracker.close()

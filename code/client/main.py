@@ -5,6 +5,7 @@ This is the entry point of the client's application.
 __author__ = "Ron Remets"
 import threading
 import time
+import logging
 
 from kivy.app import App
 from kivy.lang import Builder
@@ -17,6 +18,7 @@ from communication import communication_protocol
 import ui
 
 SERVER_ADDRESS = ("127.0.0.1", 2125)
+logging.basicConfig(level=logging.DEBUG)
 
 
 class RCScreenApp(App):
@@ -71,11 +73,11 @@ class RCScreenApp(App):
             raise ValueError("connection already exists")
         connection = AdvancedSocket(address)
         connection.start(True, True)
-        print(f"sending method: {method}")
+        logging.debug(f"Sending method: {method}")
         connection.send(Message(
             MESSAGE_TYPES["server interaction"],
             f"{method}".encode(communication_protocol.ENCODING)))
-        print("sent method")
+        logging.debug(f"Sent method")
         connection.send(Message(
             MESSAGE_TYPES["server interaction"],
             (f"{self.username}\n"
@@ -83,14 +85,14 @@ class RCScreenApp(App):
              f"{connection_type}\n"
              f"{name}").encode(
                 communication_protocol.ENCODING)))
-        print("test")
-        print(f"Is {name} connected? "
-              + connection.recv().get_content_as_text()) #TODO: remove the print keep the recv
+        logging.info("Receiving connection status")
+        connection_status = connection.recv().get_content_as_text()
+        logging.info(f"Connection status: {connection_status}")
         connection.send(Message(
             MESSAGE_TYPES["server interaction"],
             "Connected".encode(communication_protocol.ENCODING)))
+        time.sleep(1)  # TODO: remove and replace with a main type socket syncing with the server
         connection.switch_state(*buffer_state)
-        time.sleep(1) # TODO: remove and replace with a main type socket syncing with the server
         self.connections[name] = connection
 
     def close_connection(self, name, kill=False):  # TODO: kill or block?
@@ -99,7 +101,7 @@ class RCScreenApp(App):
         :param name: The name of the connection
         :param kill: kill the threads?
         """
-        print(f"closing connection {name}")
+        logging.info(f"Closing connection {name}")
         self.connections[name].close(kill)  # TODO: parameters
         self.connections.pop(name)
 

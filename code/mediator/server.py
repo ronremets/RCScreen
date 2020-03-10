@@ -209,13 +209,18 @@ class Server(object):
         if connection.type == "main":
             connection.start()
             self._run_main(connection, user)
-        elif connection.type in ("frame - sender", "sound", "mouse move"):
+        elif connection.type in ("frame - sender",
+                                 "sound",
+                                 "mouse movement - sender"):
             # TODO: put in dict and add connections with different client and server buffering
             print("found unbuffered socket")
             connection.socket.switch_state(False, True)
             connection.start()
             self._run_unbuffered(connection, user)
-        elif connection.type in ("keyboard", "mouse button", "frame - receiver"):
+        elif connection.type in ("keyboard",
+                                 "mouse button",
+                                 "frame - receiver",
+                                 "mouse movement - receiver"):
             print("found buffered socket")
             connection.socket.switch_state(True, False)
             connection.start()
