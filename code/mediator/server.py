@@ -5,6 +5,7 @@ TODO: Add exception handling.
 
 __author__ = "Ron Remets"
 
+import logging
 import socket
 import threading
 
@@ -13,12 +14,12 @@ from communication.message import Message, MESSAGE_TYPES
 from communication import communication_protocol
 from communication.advanced_socket import AdvancedSocket
 from connection import Connection
-from data.users_database import UsersDatabase
+from users_database import UsersDatabase
 
 # TODO: Add a DNS request instead of static IP and port.
 SERVER_ADDRESS = ("0.0.0.0", 2125)  # TODO: put it here or in main?
 # TODO: Do we need timeout? Did we implement it all the way? How much to
-#  it
+#  set it
 TIMEOUT = 2
 
 
@@ -63,7 +64,7 @@ class Server(object):
                 connection.socket.send(Message(
                     MESSAGE_TYPES["server interaction"],
                     "set partner".encode(communication_protocol.ENCODING)))
-                print("setted partener to :" + str(partner_username))
+                logging.info("set partener to :" + str(partner_username))
             elif params[0] == "get all usernames":
                 connection.socket.send(Message(
                     MESSAGE_TYPES["server interaction"],
@@ -82,7 +83,7 @@ class Server(object):
             #  user and more
 
     def _run_buffered(self, connection, user):
-        print("starting buffered")
+        logging.info("starting buffered")
         while self.running:
             # TODO: wait until partner has connection and then start
             #  ie, never do an infinite loop that does not do anything
@@ -93,7 +94,7 @@ class Server(object):
                         connection.socket.recv().content))
 
     def _run_unbuffered(self, connection, user):
-        print("starting unbuffered")
+        logging.info("starting unbuffered")
         while self.running:
             if connection.name in user.partner.connections:
                 # TODO: second if can crash!!! needs a lock what if the
@@ -142,7 +143,7 @@ class Server(object):
         if database_connection is None:
             database_connection = UsersDatabase(self._db_file_name)
         # TODO: add something like logging in here
-        print(database_connection.get_user(username, password))
+        logging.info(database_connection.get_user(username, password))
 
         connection = Connection(
             connection_name,
@@ -177,7 +178,7 @@ class Server(object):
         connection_advanced_socket.start(True, True, connection_socket)
         connecting_method = connection_advanced_socket.recv(
             ).get_content_as_text()
-        print("connecting method: " + connecting_method)
+        logging.info("connecting method: " + connecting_method)
         connection_info = connection_advanced_socket.recv(
             ).get_content_as_text().split("\n")
         if connecting_method == "login":
@@ -194,8 +195,8 @@ class Server(object):
             MESSAGE_TYPES["server interaction"],
             "Connected".encode(communication_protocol.ENCODING)))
         # make sure both switch state
-        print(connection.socket.recv().get_content_as_text()) #TODO: remove the print keep the recv
-        print("sent connected and starting connection")
+        logging.info(connection.socket.recv().get_content_as_text()) #TODO: remove the print keep the recv
+        logging.info("sent connected and starting connection")
         return connection, user
 
     def _run_connection(self, connection_socket):
@@ -204,24 +205,24 @@ class Server(object):
         :param connection_socket: the socket of the connection
         """
         connection, user = self._create_connection(connection_socket)
-        print("gonna do my job")
+        logging.info("Starting main loop of connection")
         # TODO: fix: getpeerbyname might not be supported on all systems
         if connection.type == "main":
             connection.start()
             self._run_main(connection, user)
         elif connection.type in ("frame - sender",
                                  "sound",
-                                 "mouse movement - sender"):
+                                 "mouse - sender"):
             # TODO: put in dict and add connections with different client and server buffering
-            print("found unbuffered socket")
+            logging.info("connecting unbuffered socket")
             connection.socket.switch_state(False, True)
             connection.start()
             self._run_unbuffered(connection, user)
         elif connection.type in ("keyboard",
                                  "mouse button",
                                  "frame - receiver",
-                                 "mouse movement - receiver"):
-            print("found buffered socket")
+                                 "mouse - receiver"):
+            logging.info("connecting buffered socket")
             connection.socket.switch_state(True, False)
             connection.start()
             self._run_buffered(connection, user)
@@ -235,7 +236,7 @@ class Server(object):
             try:
                 connection_socket, addr = self._server_socket.accept()
                 # TODO: Remove and replace with logging.
-                print(f"New client: {addr}")
+                logging.info(f"New client: {addr}")
                 threading.Thread(
                     target=self._run_connection,
                     args=(connection_socket,)).start()
@@ -261,10 +262,8 @@ class Server(object):
         """
         Start the server.
         """
-        # maybe use a dict like {user:client}
         self._users = {}
         self._connections = []
-        #self._users_database = UsersDatabase("users.db")
         self._server_socket = socket.socket()
         self._server_socket.settimeout(TIMEOUT)
         self._server_socket.bind(SERVER_ADDRESS)
@@ -276,7 +275,7 @@ class Server(object):
         self._set_running(True)
         self._connect_connections_thread.start()
         self._remove_closed_connections_thread.start()
-        print("done starting server")
+        logging.info("done starting server")
 
     def close(self, block=True):
         """

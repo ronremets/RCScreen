@@ -8,6 +8,7 @@ import threading
 import time
 import logging
 
+import win32api
 from kivy.app import App
 from kivy.uix.screenmanager import Screen
 
@@ -54,18 +55,20 @@ class ControlledScreen(Screen):
                 self._app.connections["screen recorder"].send(Message(
                     MESSAGE_TYPES["controlled"],
                     frame))
-            # time.sleep(0.1)  # TODO: remove?
+            else:
+                print("frame is None")
 
     def _mouse_movement_update(self):
         """
         Get the position og the mouse and move it to there
         """
         while self.running:
-            logging.debug("Updating mouse movement")
+            # logging.debug("Updating mouse movement")
             point = self._app.connections["mouse movement tracker"].recv().get_content_as_text()
-            point = point[1:-1].split(",")
-            print(point)
-            # win32api.SetCursorPos(point)
+            x, y = point[1:-1].split(",")
+            x, y = int(x), int(y)
+            logging.debug(f"({x}, {y})")
+            # win32api.SetCursorPos((x, y))
 
     def on_enter(self, *args):
         """

@@ -17,7 +17,6 @@ WindowManager:
     ControllerScreen:
     ControlledScreen:
 
-
 <LoginScreen>:
     login_button: login_button
     username_text_input: username_text_input
@@ -315,31 +314,103 @@ WindowManager:
             on_press:
                 self.text = "pressed"
 
-
 <ControllerScreen>
     screen: screen
+    controller: controller
     name: "controller"
 
     Image:
         id: screen
         source: ""
+        pos: (0, 0)
+        size: root.size
+        allow_stretch: True
 
     DynamicButton:
         background_color: 1, 1, 1, 0.5
-        size: root.height / 10, root.height / 10
-        size_hint: None, None
+        size_hint: 0.1, 0.1
         pos: 0, root.height - self.height
         text: "Back"
         on_press:
             root.manager.transition.direction = "right"
             app.root.current = "connect"
 
+    Controller:
+        id: controller
+        left_click_button: left_click_button
+        right_click_button: right_click_button
+        left_button: left_button
+        right_button: right_button
+        up_button: up_button
+        down_button: down_button
+
+        #size: 0.5 * root.width, 0.5 * root.height
+        size_hint: 0.5, 0.5
+        #size_hint: None, None
+        pos: root.width - self.width, 0
+        # pos_hint: {"x": 1, "y": 0}
+
+        #DynamicButton:
+        #    text: "all"
+        #    size_hint: 1, 1
+        #    pos_hint: {"x": 0, "y": 0}
+
+        DynamicButton:
+            id: left_click_button
+            text: "Left click"
+            size_hint: 0.25, 1 / 3
+            pos:
+                (self.width,
+                0.5 * root.controller.height - self.height / 2)
+            on_press: root.controller.left_mouse_button_pressed()
+
+        DynamicButton:
+            id: right_click_button
+            text: "Right click"
+            size_hint: 0.25, 1 / 3
+            pos:
+                (2 * self.width,
+                0.5 * root.controller.height - self.height / 2)
+            on_press: root.controller.right_mouse_button_pressed()
+
+        DynamicButton:
+            id: left_button
+            text: "<"
+            size_hint: 0.25, 1 / 3
+            pos: (0, 0.5 * root.controller.height - self.height / 2)
+            on_press: root.controller.move_mouse_left()
+
+        DynamicButton:
+            id: right_button
+            text: ">"
+            size_hint: 0.25, 1 / 3
+            pos:
+                (root.controller.width - self.width,
+                0.5 * root.controller.height - self.height / 2)
+            on_press: root.controller.move_mouse_right()
+
+        DynamicButton:
+            id: up_button
+            text: "^"
+            size_hint: 0.25, 1 / 3
+            pos:
+                (0.5 * root.controller.width - self.width / 2,
+                root.controller.height - self.height)
+            on_press: root.controller.move_mouse_up()
+
+        DynamicButton:
+            id: down_button
+            text: "v"
+            size_hint: 0.25, 1 / 3
+            pos: (0.5 * root.controller.width - self.width / 2, 0)
+            on_press: controller.move_mouse_down()
+
 <ControlledScreen>
     name: "controlled"
 
     DynamicButton:
         background_color: 1, 1, 1, 0.5
-        size: root.height / 10, root.height / 10
+        size: root.width / 10, root.height / 10
         size_hint: None, None
         pos: 0, root.height - self.height
         text: "Back"

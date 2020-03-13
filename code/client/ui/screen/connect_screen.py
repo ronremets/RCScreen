@@ -35,14 +35,16 @@ class ConnectScreen(Screen):
         self._get_users_lock = threading.Lock()
         with self._get_users_lock:
             self._get_users = True
-        self._connected_users = []
-        self._all_users = []
+        self._connected_users = None
+        self._all_users = None
         self._get_users_thread = None
         # TODO: add one socket for users update and for one for
         #  set partner and connect
         # TODO: just use more sockets
 
     def on_enter(self):
+        self._connected_users = []
+        self._all_users = []
         with self._get_users_lock:
             self._get_users = True
         self._app.add_connection("get users", (True, True), "main")
@@ -54,7 +56,6 @@ class ConnectScreen(Screen):
         with self._get_users_lock:
             self._get_users = False
         logging.debug("trying to close connection")
-        #print("is thread alive? " + str(self._get_users_thread.is_alive()))
         self._get_users_thread.join()  # not good because it's io
         logging.warning("Trying to crash socket")
         try:

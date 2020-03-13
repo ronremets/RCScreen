@@ -1,5 +1,6 @@
 """
 Record the screen
+TODO: maybe subclass is thread? maybe no subclass?
 """
 
 __author__ = "Ron Remets"
@@ -45,6 +46,7 @@ class ScreenRecorder(Tracker):
         Capture current frame
         """
         frame = PIL.ImageGrab.grab()
+        frame = frame.resize((640, 360))
         frame_bytes = io.BytesIO()
         frame.save(frame_bytes, self.screen_image_format)
         frame_bytes.seek(0)

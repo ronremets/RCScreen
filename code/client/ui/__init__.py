@@ -7,4 +7,4 @@ __author__ = "Ron Remets"
 import screen
 import popup
 import screen_manager
-import streamed_image
+import controller
