@@ -58,9 +58,12 @@ class MessageBuffer(object):
             else:
                 self._messages = message
 
-    def pop(self):
+    def pop(self, timeout=None):
         """
         Get a message from the buffer.
+        :param timeout: If not None and buffers is buffered, the amount
+                        of time to wait before returning. If no message
+                        added until timeout, return None.
         :return: The message and if there is not one, return None
         """
         with self._messages_lock:
@@ -68,10 +71,19 @@ class MessageBuffer(object):
                 if not self._messages.empty():
                     # no dead lock because otherwise it would not
                     # enter the if
-                    return self._messages.get(block=True)
+                    return self._messages.get(timeout=timeout)
                 return None
             if self._messages is None:
                 return None
             message = self._messages
             self._messages = None
             return message
+
+    def empty(self):
+        """
+        Check if the buffer is empty. Not reliable if multi threaded as
+        Other threads can add items immediately after checking
+        :return: True if nothing in buffer, False otherwise
+        """
+        with self._messages_lock:
+            return self._messages.empty()

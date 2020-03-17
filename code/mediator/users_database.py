@@ -4,8 +4,7 @@ a database class for users
 
 __author__ = "Ron Remets"
 
-import traceback
-import threading
+import logging
 
 import sqlite3
 
@@ -31,8 +30,7 @@ class UsersDatabase(object):
             connection.commit()
             connection.close()
         except Exception:
-            print("Database error:")
-            traceback.print_exc()
+            logging.error("Database error:", exc_info=True)
 
     def add_user(self, username, password):
         """
@@ -79,12 +77,15 @@ class UsersDatabase(object):
         :return: A list of all the usernames.
         """
         self._cursor.execute("SELECT username FROM users")
-        usernames = self._cursor.fetchall()
-        if usernames is not None:
-            return [*usernames]
-        # TODO: remove the print and check if [*usernames] can work for
+        results = self._cursor.fetchall() # TODO: is this string?
+        if results is not None:  # TODO: why not None? add checks and errors
+            usernames = []
+            for result in results:
+                usernames.append(result[0])
+            return usernames
+        # TODO: remove the log and check if [*usernames] can work for
         #  all cases
-        print("None found")
+        logging.warning("No users found")
         return []
 
     def user_exists(self, username):

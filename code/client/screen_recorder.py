@@ -26,16 +26,21 @@ class ScreenRecorder(Tracker):
         # Never change screen format mid recording
         self.screen_image_format = DEFAULT_SCREEN_FORMAT
         self._frame_lock = threading.Lock()
-        self._set_frame(None)
+        with self._frame_lock:
+            self._frame = None
 
     @property
     def frame(self):
         """
         The current screen frame
+        After reading the frame it will turn to None until the next
+        frame is available
         :return: None if capture has not started, bytes otherwise
         """
         with self._frame_lock:
-            return self._frame
+            frame = self._frame
+            self._frame = None
+            return frame
 
     def _set_frame(self, frame):
         with self._frame_lock:
@@ -46,7 +51,7 @@ class ScreenRecorder(Tracker):
         Capture current frame
         """
         frame = PIL.ImageGrab.grab()
-        frame = frame.resize((640, 360))
+        frame = frame.resize((720, 480))
         frame_bytes = io.BytesIO()
         frame.save(frame_bytes, self.screen_image_format)
         frame_bytes.seek(0)

@@ -4,59 +4,70 @@ Wrapper for socket for use in the front end.
 
 __author__ = "Ron Remets"
 
-import threading
+import logging
 import socket
+import threading
 
-import message_buffer
 import communication_protocol
+import message_buffer
 
-TIMOUT = None
+TIMEOUT = None
 
 
 class AdvancedSocket(object):
     """
     Wrapper for socket for use in the front end.
     """
-    def __init__(self, address=None):
+    def __init__(self, address=None, timeout=TIMEOUT):
         self._address = address
         self._socket = None
         self._recv_thread = None
         self._send_thread = None
+        self._timeout = timeout
         self._messages_received = message_buffer.MessageBuffer()
         self._messages_to_send = message_buffer.MessageBuffer()
-        self._messages_received_lock = threading.Lock()
-        self._messages_to_send_lock = threading.Lock()
+        # self._messages_received_lock = threading.Lock()
+        # self._messages_to_send_lock = threading.Lock()
         self._running_lock = threading.Lock()
         self._set_running(False)
 
     @property
     def running(self):
         with self._running_lock:
-            return self.__running
+            return self._running
 
     def _set_running(self, value):
         with self._running_lock:
-            self.__running = value
+            self._running = value
 
     def _receive_messages(self):
         """
         Receive messages until server closes
         """
         while self.running:
-            self._messages_received.add(communication_protocol.recv_message(
-                self._socket))
-            print("did it")
+            try:
+                self._messages_received.add(
+                    communication_protocol.recv_message(self._socket,
+                                                        self._timeout))
+            except socket.timeout:
+                logging.error("Socket timed out", exc_info=True)
+                self.close(kill=True)
 
     def _send_messages(self):
         """
         Send messages until server closes
         """
         while self.running:
-            message = self._messages_to_send.pop()
+            message = self._messages_to_send.pop(timeout=self._timeout)
             if message is not None:
-                communication_protocol.send_message(
-                    self._socket,
-                    message)
+                try:
+                    communication_protocol.send_message(
+                        self._socket,
+                        message,
+                        self._timeout)
+                except socket.timeout:
+                    logging.error("Socket timed out", exc_info=True)
+                    self.close(kill=True)
 
     def switch_state(self, input_is_buffered, output_is_buffered):
         """
@@ -67,12 +78,21 @@ class AdvancedSocket(object):
         self._messages_received.switch_state(input_is_buffered)
         self._messages_to_send.switch_state(output_is_buffered)
 
-    def send(self, message):
+    def send(self, message, block_until_buffer_empty=False):
         """
         Send a message.
         :param message: The message to send
+        :param block_until_buffer_empty: Block until the message buffer
+                                         is empty. This means that all
+                                         the messages that were supposed
+                                         to be sent were sent or about
+                                         it be sent and the buffer can
+                                         safely switch state.
         """
         self._messages_to_send.add(message)
+        if block_until_buffer_empty:
+            while not self._messages_to_send.empty():
+                pass
 
     def recv(self, block=True):
         """
@@ -94,7 +114,6 @@ class AdvancedSocket(object):
             self._socket.connect(self._address)
         else:
             self._socket = client_socket
-        self._socket.settimeout(TIMOUT)
         self._recv_thread = threading.Thread(target=self._receive_messages)
         self._send_thread = threading.Thread(target=self._send_messages)
         self.switch_state(input_is_buffered, output_is_buffered)
@@ -107,6 +126,7 @@ class AdvancedSocket(object):
         Close the threads and socket
         :param kill: kill the threads
         """
+        logging.info("CONNECTIONS:Closing socket")
         self._set_running(False)
         if not kill:
             self._recv_thread.join()

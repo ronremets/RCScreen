@@ -42,43 +42,28 @@ class ConnectScreen(Screen):
         #  set partner and connect
         # TODO: just use more sockets
 
-    def on_enter(self):
-        self._connected_users = []
-        self._all_users = []
-        with self._get_users_lock:
-            self._get_users = True
-        self._app.add_connection("get users", (True, True), "main")
-        self._get_users_thread = threading.Thread(target=self.update_users)
-        self._get_users_thread.start()
-
-    def on_pre_leave(self):
-        logging.debug("starting to leave")
-        with self._get_users_lock:
-            self._get_users = False
-        logging.debug("trying to close connection")
-        self._get_users_thread.join()  # not good because it's io
-        logging.warning("Trying to crash socket")
-        try:
-            self._app.close_connection("get users", True)
-        except Exception as e:
-            logging.error("socket error while closing: " + str(e))
-        logging.debug("closed connection to get users")
-
     def connect_to_partner(self):
         # TODO: run this on another thread and check progress in main
         #  thread
-        self._app.connections["main"].send(Message(
+        # TODO: is main connected? check here or assume it is connected?
+        self._app.connection_manager.connections["main"].send(Message(
             MESSAGE_TYPES["server interaction"],
-            f"set partner\n{self._app.partner}".encode(
-                communication_protocol.ENCODING)))
-        logging.debug(
-            "answer to partner"
-            + self._app.connections["main"].recv().get_content_as_text())
+            f"set partner\n{self._app.partner}"))
+        response = self._app.connection_manager.connections["main"].recv()
+        response = response.get_content_as_text()
+        logging.debug(f"MAIN:answer to partner: {response}")
 
-    def update_users(self):
+    def get_users(self):
         """
         Get the users from the server and update the lists
         """
+        while "get users" not in self._app.connection_manager.connections.keys():
+            pass
+        # TODO: why is this needed? didnt you fix this?
+        while not self._app.connection_manager.connections["get users"] is not None:
+            pass
+        while not self._app.connection_manager.connections["get users"].connected:
+            pass
         while True:
             with self._get_users_lock:
                 run = self._get_users
@@ -87,25 +72,21 @@ class ConnectScreen(Screen):
                 break
             time.sleep(1)
             logging.debug("sending get connected users request")
-            self._app.connections["get users"].send(Message(
+            self._app.connection_manager.connections["get users"].send(Message(
                 MESSAGE_TYPES["server interaction"],
-                "get all connected usernames".encode(
-                    communication_protocol.ENCODING)))
-            usernames = self._app.connections["get users"].recv().get_content_as_text()
-            usernames = usernames[1:-1].split(", ")
-            for i in range(len(usernames)):
-                usernames[i] = usernames[i].replace("'", "")
+                "get all connected usernames"))
+            usernames = self._app.connection_manager.connections["get users"].recv().get_content_as_text()
+            usernames = usernames.split(", ")
 
             with self._connected_users_lock:
                 self._connected_users = usernames
 
             logging.debug("sending get all users request")
-            self._app.connections["get users"].send(Message(
+            self._app.connection_manager.connections["get users"].send(Message(
                 MESSAGE_TYPES["server interaction"],
-                "get all usernames".encode(
-                    communication_protocol.ENCODING)))
-            usernames = self._app.connections["get users"].recv().get_content_as_text()
-            usernames = usernames[1:-1].split(", ")
+                "get all usernames"))
+            usernames = self._app.connection_manager.connections["get users"].recv().get_content_as_text()
+            usernames = usernames.split(", ")
             with self._all_users_lock:
                 self._all_users = usernames
 
@@ -155,3 +136,27 @@ class ConnectScreen(Screen):
                 height=40,
                 on_press=self.select_username))
         logging.debug("after child:" + str(self.users_grid.children))
+
+    def on_enter(self):
+        self._connected_users = []
+        self._all_users = []
+        with self._get_users_lock:
+            self._get_users = True
+        self._app.connection_manager.add_connection("get users",
+                                                    (True, True),
+                                                    "main")
+        self._get_users_thread = threading.Thread(target=self.get_users)
+        self._get_users_thread.start()
+
+    def on_pre_leave(self):
+        logging.debug("starting to leave")
+        with self._get_users_lock:
+            self._get_users = False
+        logging.debug("trying to close connection")
+        self._get_users_thread.join()  # not good because it's io
+        logging.warning("Trying to crash socket")
+        try:
+            self._app.connection_manager.close_connection("get users", True)
+        except Exception as e:
+            logging.error("socket error while closing: " + str(e))
+        logging.debug("closed connection to get users")
