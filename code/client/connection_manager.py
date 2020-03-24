@@ -5,6 +5,7 @@ __author__ = "Ron Remets"
 
 import logging
 import threading
+import queue
 
 # from communication import communication_protocol
 from communication.advanced_socket import AdvancedSocket
@@ -19,12 +20,13 @@ class ConnectionManager(object):
     def __init__(self):
         self._running_lock = threading.Lock()
         self._connections_lock = threading.Lock()
-        self._connection_requests_lock = threading.Lock()
+        self._tokens_lock = threading.Lock()
+        # All the available tokens as dict like {name: token}
+        self._tokens = None
         # All the connections
-        with self._connections_lock:
-            self._connections = None
-        # A queue for connector to know to whom to connect
-        self._connection_requests = None
+        self._connections = None
+        # A queue for connector to know to whom to get tokens
+        self._token_requests = None
         # A connection that adds other connections
         self._connector = None
         self._connector_thread = None
@@ -67,13 +69,13 @@ class ConnectionManager(object):
         logging.debug(f"CONNECTIONS:Sending user info:\n"
                       f"{username}\n"
                       f"{password}\n"
-                      f"main\n"
+                      f"connector\n"
                       f"connector")
         self._connector.socket.send(Message(
             MESSAGE_TYPES["server interaction"],
             (f"{username}\n"
              f"{password}\n"
-             f"main\n"
+             f"connector\n"
              f"connector")))
         logging.debug("CONNECTIONS:Sent user's info")
         logging.debug("CONNECTIONS:Receiving connection status")
@@ -95,11 +97,15 @@ class ConnectionManager(object):
         :param name: The name of the connection that need the token
         :return: The token as a bytes object
         """
+        logging.debug(f"CONNECTIONS:Sending request for token for {name}")
         self._connector.socket.send(Message(
             MESSAGE_TYPES["server interaction"],
             name))
-        response = self._connector.socket.recv().split("\n")
-        return {"status": response[0], "token": response[1]}
+        logging.debug(f"CONNECTIONS:Receiving token for {name}")
+        response = self._connector.socket.recv().content.split(b"\n")
+        logging.debug(
+            f"CONNECTIONS:Received response for token for {name}: {response}")
+        return {"status": response[0].decode(), "token": response[1]}
 
     # TODO: change to just token (get_token_from_connector)
     def _run_connector(self, username, password, method):
@@ -111,14 +117,14 @@ class ConnectionManager(object):
         """
         self._add_connector(username, password, method)
         while self.running:
-            with self._connection_requests_lock:
-                for name in self._connection_requests.keys():
-                    if self._connection_requests[name] == "get token":
-                        self._connection_requests[name] = self._get_token(name)
-                    # elif request == "ready":
-                    #    pass
-                    # elif request == "wait until ready":
-                    #    pass
+            try:
+                name = self._token_requests.get(block=False)  # TODO: timeout?
+            except queue.Empty:  # TODO: any better way to do this?
+                name = None
+            if name is not None:
+                token = self._get_token(name)  # TODO: what if this crashes?
+                with self._tokens_lock:
+                    self._tokens[name] = token
 
     def add_connector(self, username, password, method):
         """
@@ -143,32 +149,11 @@ class ConnectionManager(object):
             args=(username, password, method))
         self._connector_thread.start()
 
-    def _add_request_to_connector(self, name, request):  # TODO: just token???
-        """
-        Add a request to connector to send the server.
-        :param name: The connection's name
-        :param request: A string with the name of the request
-        :return: The response as a dict
-        """
-        with self._connection_requests_lock:
-            self._connection_requests[name] = request
-        # TODO: add timeout
-        logging.debug(f"CONNECTIONS:Request {request} to connector for {name}")
-        while True:
-            with self._connection_requests_lock:
-                response = self._connection_requests[name]
-            if response is not request:
-                break
-        logging.debug(
-            f"CONNECTIONS:Got response to {request} for {name}: {response}")
-        with self._connection_requests_lock:
-            self._connection_requests.pop(name)
-        return response
-
-    def _connect_connection(self, connection, token, buffer_state):
+    def _connect_connection(self, connection, username, token, buffer_state):
         """
         Connect a connection to the server
         :param connection: a Connection object ot connect
+        :param username: The username of the user
         :param token: The token to use to connect
         :param buffer_state: The buffer's state of the connection
                              (See AdvancedSocket)
@@ -178,20 +163,22 @@ class ConnectionManager(object):
             MESSAGE_TYPES["server interaction"],
             "token"))
         logging.debug(f"CONNECTIONS:Sent method")
-        logging.debug(f"CONNECTIONS:Sending token:\n"
+        logging.debug(f"CONNECTIONS:Sending user info:\n"
+                      f"{username}\n"
                       f"{token}\n"
                       f"{connection.type}\n"
                       f"{connection.name}")
         connection.socket.send(Message(
             MESSAGE_TYPES["server interaction"],
-            (f"{token}\n"
+            (f"{username}\n"
+             f"{token.decode()}\n"  # TODO: you should not have to decode
              f"{connection.type}\n"
              f"{connection.name}")))
         logging.debug(f"CONNECTIONS:Sent user's info")
 
         # Make sure the server is ready to start the main loop and
         # switch buffers states
-        response = connection.socket.recv()
+        response = connection.socket.recv().get_content_as_text()
         logging.debug(
             f"CONNECTIONS:{connection.name} connection status: {response}")
         # Make sure buffers are empty before switching
@@ -199,34 +186,48 @@ class ConnectionManager(object):
             MESSAGE_TYPES["server interaction"],
             "ready"),
             block_until_buffer_empty=True)
+        logging.debug(
+            f"CONNECTIONS:{connection.name} sent ready")
         connection.socket.switch_state(*buffer_state)
         self.connections[connection.name] = connection
         connection.connected = True
 
     def _add_connection(self,
+                        username,
                         name,
                         buffer_state,
                         connection_type):
         """
         Add a connection to app. Only call this after sign in or log in.
+        :param username: The username of the user
         :param name: The name of the connection
         :param buffer_state: a tuple like
                (input is buffered, output is buffered)
         :param connection_type: The type of connection to report to
                the server
         """
+        # Request token
+        self._token_requests.put(name, block=True)
         # Wait for connector to get a token
-        response = self._add_request_to_connector(name, "get token")
-        if response["token response"] == "token ok":
+        while True:  # TODO: add timeout or error in response that is timeout
+            with self._tokens_lock:
+                if name in self._tokens:
+                    response = self._tokens[name]  # TODO: error can be client timeout
+                    break
+        if response["status"] == "ok":
             connection = Connection(name,
                                     AdvancedSocket(self._server_address),
                                     connection_type)
             connection.socket.start(True, True)
             self._connect_connection(connection,
+                                     username,
                                      response["token"],
                                      buffer_state)
+        else:
+            raise ValueError("TOKEN ERROR")
 
     def add_connection(self,
+                       username,
                        name,
                        buffer_state,
                        connection_type,
@@ -235,6 +236,7 @@ class ConnectionManager(object):
         Add a connection to app.
         This part of add_connection is not thread safe.
         You should create connections only from the main thread.
+        :param username: The username of the user
         :param name: The name of the connection
         :param buffer_state: a tuple like
                (input is buffered, output is buffered)
@@ -262,7 +264,8 @@ class ConnectionManager(object):
         # connecting
         self.connections[name] = None
         add_thread = threading.Thread(target=self._add_connection,
-                                      args=(name,
+                                      args=(username,
+                                            name,
                                             buffer_state,
                                             connection_type))
         add_thread.start()
@@ -289,10 +292,11 @@ class ConnectionManager(object):
         # The server address
         self._server_address = server_address
         # All the connections
-        with self._connections_lock:
-            self._connections = dict()
-        # A dict like {name: {connection_response: str, token: bytes}}
-        self._connection_requests = {}
+        self._connections = dict()
+        # all the names of the connections that need tokens
+        self._token_requests = queue.SimpleQueue()
+        # All the tokens like {connection.name: token}
+        self._tokens = {}
         # A connection that adds other connections
         self._connector = Connection("connector",
                                      AdvancedSocket(server_address),

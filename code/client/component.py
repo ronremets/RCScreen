@@ -7,12 +7,12 @@ import logging
 import threading
 
 
-class Tracker(object):
+class Component(object):
     """
     Base class for controlling components
     """
-    def __init__(self, name):
-        self._name = name  # The name of the component
+    def __init__(self):
+        self._name = "Component"  # The name of the component
         self._main_thread = None
         self._running_lock = threading.Lock()
         self._set_running(False)
@@ -20,7 +20,7 @@ class Tracker(object):
     @property
     def running(self):
         """
-        Check if the tracker is running
+        Check if the component is running
         :return: True if it is, otherwise False
         """
         with self._running_lock:
@@ -35,6 +35,7 @@ class Tracker(object):
         The main thread of the component. This runs the self._update
         function until component closes
         """
+        self._setup()
         while self.running:
             self._update()
 
@@ -43,21 +44,29 @@ class Tracker(object):
         This is what the component does in every update
         """
 
-    def start(self):
+    def _setup(self):
+        """
+        This is what the component does before starting, this runs in
+        the same thread the self._update runs in
+        """
+
+    def _start(self):  # TODO: maybe rename to start_tracking
         """
         Create and start the main thread. Call this from sub class
         after configuring the components.
         """
-        logging.info(f"Starting {self._name}")
+        logging.info(f"Starting component {self._name}")
         self._set_running(True)
         self._main_thread = threading.Thread(target=self._run)
         self._main_thread.start()
 
-    def close(self, block=True):
+    def close(self, timeout=None):
         """
         Stop the component and close the threads
+        :param timeout: the time is seconds to wait until all threads
+                        close
         """
         logging.info(f"Closing {self._name}")
         self._set_running(False)
-        if block and self._main_thread is not None:
-            self._main_thread.join()
+        if self._main_thread is not None:
+            self._main_thread.join(timeout)

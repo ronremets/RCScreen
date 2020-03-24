@@ -30,9 +30,11 @@ class LoginScreen(Screen):
         app.connection_manager.add_connector(app.username,
                                              app.password,
                                              "login")
-        app.connection_manager.add_connection("main",
-                                              (True, True),
-                                              "main")
+        app.connection_manager.add_connection(
+            app.username,
+            "main",
+            (True, True),
+            "main")
         logging.info("MAIN:logged in")
         # if logged_in:
         self.manager.transition.direction = "up"

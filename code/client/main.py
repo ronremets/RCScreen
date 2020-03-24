@@ -7,6 +7,7 @@ import threading
 import time
 import logging
 
+from kivy.core.window import Window
 from kivy.app import App
 from kivy.lang import Builder
 from kivy.properties import ObjectProperty, StringProperty, BooleanProperty
@@ -18,15 +19,18 @@ import ui
 SERVER_ADDRESS = ("127.0.0.1", 2125)
 logging.basicConfig(level=logging.DEBUG)
 
+DEFAULT_SCREEN_IMAGE_FORMAT = "png"
+
 
 class RCScreenApp(App):
     """
     Responsible for the whole client's application.
     """
-    username = StringProperty()
-    password = StringProperty()
-    is_controller = BooleanProperty()
-    partner = StringProperty()
+    screen_image_format = StringProperty(DEFAULT_SCREEN_IMAGE_FORMAT)
+    username = StringProperty("")
+    password = StringProperty("")
+    is_controller = BooleanProperty(False)
+    partner = StringProperty("")
     connection_manager = ObjectProperty(ConnectionManager())
 
     def on_start(self):

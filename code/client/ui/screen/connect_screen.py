@@ -46,10 +46,10 @@ class ConnectScreen(Screen):
         # TODO: run this on another thread and check progress in main
         #  thread
         # TODO: is main connected? check here or assume it is connected?
-        self._app.connection_manager.connections["main"].send(Message(
+        self._app.connection_manager.connections["main"].socket.send(Message(
             MESSAGE_TYPES["server interaction"],
             f"set partner\n{self._app.partner}"))
-        response = self._app.connection_manager.connections["main"].recv()
+        response = self._app.connection_manager.connections["main"].socket.recv()
         response = response.get_content_as_text()
         logging.debug(f"MAIN:answer to partner: {response}")
 
@@ -72,20 +72,20 @@ class ConnectScreen(Screen):
                 break
             time.sleep(1)
             logging.debug("sending get connected users request")
-            self._app.connection_manager.connections["get users"].send(Message(
+            self._app.connection_manager.connections["get users"].socket.send(Message(
                 MESSAGE_TYPES["server interaction"],
                 "get all connected usernames"))
-            usernames = self._app.connection_manager.connections["get users"].recv().get_content_as_text()
+            usernames = self._app.connection_manager.connections["get users"].socket.recv().get_content_as_text()
             usernames = usernames.split(", ")
 
             with self._connected_users_lock:
                 self._connected_users = usernames
 
             logging.debug("sending get all users request")
-            self._app.connection_manager.connections["get users"].send(Message(
+            self._app.connection_manager.connections["get users"].socket.send(Message(
                 MESSAGE_TYPES["server interaction"],
                 "get all usernames"))
-            usernames = self._app.connection_manager.connections["get users"].recv().get_content_as_text()
+            usernames = self._app.connection_manager.connections["get users"].socket.recv().get_content_as_text()
             usernames = usernames.split(", ")
             with self._all_users_lock:
                 self._all_users = usernames
@@ -142,9 +142,11 @@ class ConnectScreen(Screen):
         self._all_users = []
         with self._get_users_lock:
             self._get_users = True
-        self._app.connection_manager.add_connection("get users",
-                                                    (True, True),
-                                                    "main")
+        self._app.connection_manager.add_connection(
+            self._app.username,
+            "get users",
+            (True, True),
+            "main")
         self._get_users_thread = threading.Thread(target=self.get_users)
         self._get_users_thread.start()
 

@@ -11,6 +11,7 @@ import socket
 import threading
 import time
 
+from message_buffer import MessageBuffer
 from mediator.user import User
 from communication.message import Message, MESSAGE_TYPES
 from communication import communication_protocol
@@ -35,8 +36,8 @@ class Server(object):
         self._connections = None
         self._users = None
         self._tokens_index = 0
-        self._connect_connections_thread = None
-        self._remove_closed_connections_thread = None
+        self._accept_connections_thread = None
+        #self._remove_closed_connections_thread = None
         self._tokens_index_lock = threading.Lock()
         self._running_lock = threading.Lock()
         self._connections_lock = threading.Lock()
@@ -108,16 +109,20 @@ class Server(object):
     def _run_connector(self, connection, user, db_connection):
         # Only connector type sockets use login and sign up and they do
         # not need the db_connection
+        logging.info(f"CONNECTIONS:Started connector of {user.username}")
         db_connection.close()
         while self.running:
             # TODO: check name and token match
             name = connection.socket.recv().get_content_as_text()
+            logging.debug(
+                f"CONNECTIONS:Making token for {user.username}'s {name}")
             token = self.make_token()
-            with self._users_lock:
-                self._users[user].add_token(token, name)
-            connection.send(Message(
+            logging.debug(
+                f"CONNECTIONS:Made token {token} for  {user.username}'s {name}")
+            user.add_token(token, name)
+            connection.socket.send(Message(
                 MESSAGE_TYPES["server interaction"],
-                f"ok\n{token}"))
+                f"ok\n{token.decode()}"))  # TODO: you should not have to decode
 
     def _run_main(self, connection, user, db_connection):
         while self.running:
@@ -134,61 +139,76 @@ class Server(object):
             #  this user and closing all connections and deleting the
             #  user and more
 
-    def _run_buffered(self, connection, user):
-        logging.info("starting buffered")
-        while self.running:
-            # TODO: wait until partner has connection and then start
-            #  ie, never do an infinite loop that does not do anything
+    def _send_messages_to_partner(self, connection, user, buffer):
+        """
+        Send messages from a buffer to partner until connection closes
+        TODO: make sure these threads close when connection closes
+         and not when server closes (instead of while self.running use
+         something like while not connection.is_closing or something
+         like that)
+        :param connection: The connection to use to find the partner's
+                           connection
+        :param user: The user sending the messages
+        :param buffer: A reference to the buffer of messages to send
+        """
+        while self.running:  # TODO: not self.running but connection.running
             if connection.name in user.partner.connections:
-                if user.partner.connections[connection.name].connected: # TODO: FIX THIS WTF WHY
-                    user.partner.connections[connection.name].socket.send(Message(
-                        MESSAGE_TYPES["controller"],
-                        connection.socket.recv().content))
-
-    def _run_unbuffered(self, connection, user):
-        logging.info("starting unbuffered")
-        while self.running:
-            if connection.name in user.partner.connections:
-                # TODO: second if can crash!!! needs a lock what if the
-                #  connection was remove before second if?
                 if user.partner.connections[connection.name].connected:
-                    user.partner.connections[connection.name].socket.send(Message(
-                        MESSAGE_TYPES["controlled"],
-                        connection.socket.recv().content))
+                    message = buffer.pop()
+                    if message is not None:
+                        user.partner.connections[connection.name].socket.send(Message(
+                         MESSAGE_TYPES["controller"],
+                         message))
+                        # Receive an ACK
+                        user.partner.connections[connection.name].socket.recv()
 
-    def _add_connection_to_user(self, connection, token):
+    def _run_connection_to_partner(self, connection, user):
+        logging.info("starting main loop of connection to partner")
+        buffer = MessageBuffer(False)
+        # TODO: maybe keep a reference to this thread to join it
+        #  when closing the connection
+        threading.Thread(target=self._send_messages_to_partner,
+                         args=(connection, user, buffer)).start()
+        while self.running:
+            # TODO: what if connections turns from connected to not
+            #  connected? these if's have to handle this
+            if connection.name in user.partner.connections:
+                if user.partner.connections[connection.name].connected:
+                    buffer.add(connection.socket.recv().content)
+                    # Send an ACK
+                    connection.socket.send(Message(
+                        MESSAGE_TYPES["controlled"],
+                        "Message received"))
+
+    def _add_connection_to_user(self, connection, username, token):
         """
         Add a connection to a user, user must be connected and have a
         connector
         :param connection: The connection to add
+        :param username: The user's username
         :param token: The token of the user used to connect to the user
         :return: The user's object
+        :raise ValueError: If token does not exists or belong
+                           to connection or if the user does not exists
         """
         with self._connections_lock:
             self._connections.append(connection)
 
-        # TODO: should tokens be on a server list and connectors add
-        #  their users and tokens or should you add it to users?
-        # TODO: what happens if I guess token?
-        with self._users_lock:  # TODO: what if users are added or crash
-            users = self._users
-        user = None
-        found_user = True
-        while not found_user:  # TODO: add timeout or something
-            for user in users:
-                if token in user.tokens.keys():
-                    user, name = user.tokens[token]
-                    if connection.name == name:
-                        user.remove_token(token)
-                        found_user = True
-                        break
-                    else:
-                        raise ValueError(
-                            f"Token {token} does not belong to name {name}")
-        # TODO: ensure locking user.connections.connections to
-        #  prevent data corruption. While the pointer is locked the
-        #  dict itself (the object) is not
-        user.connections[connection.name] = connection
+        # A new connection can not get to here without a token in user
+        # therefore it is safe to assume it exists. Also, the user will
+        # be connected. If the user is not connected it must be because
+        # it crashed or disconnected and thus crashing this connection
+        # is fine.
+        try:
+            with self._users_lock:
+                user = self._users[username]
+        except KeyError:
+            raise ValueError("User does not exists or disconnected")
+        user.validate_token(token, connection.name)
+        user.add_connection(connection)
+        logging.debug(
+            f"CONNECTIONS:Connection {connection.name} "
+            f"added to {user.username}")
         return user
 
     def _add_connector_to_user(self, connection, username, password):
@@ -203,11 +223,17 @@ class Server(object):
             self._connections.append(connection)
 
         with self._users_lock:
+            if username in self._users.keys():
+                raise ValueError("User already connected")
             user = User(username, password, connection)
             self._users[username] = user
         # TODO: ensure locking user.connections.connections to
         #  prevent data corruption. While the pointer is locked the
         #  dict is not
+        logging.debug(
+            f"CONNECTIONS:Connection {connection.name} "
+            f"added to {user.username}")
+        user.connections[connection.name] = connection
         return user
 
     def _login(
@@ -256,7 +282,8 @@ class Server(object):
     def _connect_with_token(self,
                             connection_socket,
                             connection_info):
-        token = connection_info[0]
+        username = connection_info[0]
+        token = connection_info[1].encode("ascii") # TODO: encode everything else instead of decode this
         connection_type = connection_info[2]
         connection_name = connection_info[3]
         # TODO: add something like logging in here and errors and security
@@ -265,9 +292,12 @@ class Server(object):
             connection_name,
             connection_socket,
             connection_type)
+        # TODO: elsewhere in the code make sure you check that the
+        #  connection starts before you check if it is closed
         connection.start()  # TODO: is this fine? check the rest of the code
         user = self._add_connection_to_user(
             connection,
+            username,
             token)
         return connection, user
 
@@ -297,21 +327,21 @@ class Server(object):
                 connection_advanced_socket,
                 connection_info)
         elif connecting_method == "token":
-            connection, user, db_connection = self._connect_with_token(
+            connection, user = self._connect_with_token(
                 connection_advanced_socket,
                 connection_info)
+            db_connection = UsersDatabase(self._db_file_name)
         else:
             raise ValueError("Bad method")
-        """connection.socket.send(Message(
+
+        connection.socket.send(Message(
             MESSAGE_TYPES["server interaction"],
-            "Connected".encode(communication_protocol.ENCODING)))
-        # make sure both switch state
-        logging.info(connection.socket.recv().get_content_as_text()) #TODO: remove the print keep the recv
-        logging.info("sent connected and starting connection")"""
-        if connection.name == "connector":
-            connection.socket.send(Message(
-                MESSAGE_TYPES["server interaction"],
-                "Connected"))
+            "ready"))
+        if connection.name != "connector":
+            # Make sure buffers are empty before switching
+            response = connection.socket.recv(block=True)
+            logging.debug(
+                f"CONNECTIONS:{connection.name} connection status: {response}")
         return connection, user, db_connection
 
     def _run_connection(self, connection_socket):
@@ -321,39 +351,40 @@ class Server(object):
         """
         connection, user, db_connection = self._create_connection(
             connection_socket)
-        logging.info("Starting main loop of connection")
+        logging.info(
+            f"CONNECTIONS:Selecting main loop"
+            f"for connection {connection.name}")
         # TODO: fix: getpeerbyname might not be supported on all systems
         if connection.type == "connector":
+            connection.connected = True
             self._run_connector(connection, user, db_connection)
         elif connection.type == "main":
             connection.connected = True
             self._run_main(connection, user, db_connection)
-        elif connection.type in ("frame - sender",
-                                 "sound",
+        elif connection.type in ("keyboard - sender",
+                                 "frame - sender",
                                  "mouse - sender"):
             # TODO: put in dict and add connections with different client and server buffering
             logging.info("connecting unbuffered socket")
-            #connection.socket.switch_state(False, True)
-            connection.socket.switch_state(False, False)
+            connection.socket.switch_state(False, True)
             connection.connected = True
-            self._run_unbuffered(connection, user)
-        elif connection.type in ("keyboard",
+            self._run_connection_to_partner(connection, user)
+        elif connection.type in ("keyboard - receiver",
                                  "frame - receiver",
                                  "mouse - receiver"):
             logging.info("connecting buffered socket")
-            #connection.socket.switch_state(True, False)
-            connection.socket.switch_state(False, False)
+            connection.socket.switch_state(True, False)
             connection.connected = True
-            self._run_buffered(connection, user)
+            #self._run_connection_to_partner(connection, user)
         else:
             raise ValueError("type does not exists")
-        connection.close()
+        #connection.close()
 
-    def _connect_connections(self):
+    def _accept_connections(self):
         """
-        Connect connections until server closes.
+        Accept and handle connections until server closes.
         """
-        while self.running:
+        while self.running:  # TODO: add timeout
             try:
                 connection_socket, addr = self._server_socket.accept()
                 logging.info(f"New client: {addr}")
@@ -363,20 +394,20 @@ class Server(object):
             except socket.timeout:
                 pass
 
-    def _remove_closed_connections(self):
+    #def _remove_closed_connections(self):
         """
         Remove closed connections from the list of connections until
         the server closes.
         """
         # TODO: Rethink this. Is it necessary? Any faster way of doing
         #  this?
-        while self.running:
-            with self._connections_lock:
+    #    while self.running:
+    #        with self._connections_lock:
                 # Create a shallow copy of the list because of the
                 # for loop.
-                for connection in self._connections[:]:
-                    if not connection.running:
-                        self._connections.remove(connection)
+    #            for connection in self._connections[:]:
+    #                if not connection.running:
+    #                    self._connections.remove(connection)
 
     def start(self):
         """
@@ -388,25 +419,24 @@ class Server(object):
         self._server_socket.settimeout(TIMEOUT)
         self._server_socket.bind(SERVER_ADDRESS)
         self._server_socket.listen()  # TODO: Add parameter here.
-        self._connect_connections_thread = threading.Thread(
-            target=self._connect_connections)
-        self._remove_closed_connections_thread = threading.Thread(
-            target=self._remove_closed_connections)
+        self._accept_connections_thread = threading.Thread(
+            target=self._accept_connections)
+        #self._remove_closed_connections_thread = threading.Thread(
+        #    target=self._remove_closed_connections)
         self._set_running(True)
-        self._connect_connections_thread.start()
-        self._remove_closed_connections_thread.start()
+        self._accept_connections_thread.start()
+        #self._remove_closed_connections_thread.start()
         logging.info("done starting server")
 
-    def close(self, block=True):
+    def close(self, timeout=None):
         """
         Close the server.
-        :param block: (When True) - Wait for all threads to finish
-                      before closing which results in a smoother close.
+        :param timeout: If not None, the amount of seconds to wait
+                        when closing
         """
         self._set_running(False)
-        if block:
-            self._connect_connections_thread.join()
-            self._remove_closed_connections_thread.join()
+        self._connect_connections_thread.join(timeout)
+        #self._remove_closed_connections_thread.join()
         # TODO: Make sure all connections are closed before calling close
         #  on server socket
         self._server_socket.close()

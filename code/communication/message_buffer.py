@@ -47,18 +47,24 @@ class MessageBuffer(object):
             else:
                 self._messages = None
 
-    def add(self, message):
+    def add(self, message, timeout=None):
         """
         Add messages to buffer.
         :param message: The message to add.
+        :param timeout: If not None and buffer is buffered, the time
+                        while adding. If timeout occurs, raise
+                        queue.Full
+        :raise queue.Full: If timeout occurs and buffered
         """
         with self._messages_lock:
             if self._buffered:
-                self._messages.put(message)
+                self._messages.put(message,
+                                   block=timeout is None,
+                                   timeout=timeout)
             else:
                 self._messages = message
 
-    def pop(self, timeout=None):
+    def pop(self, timeout=None): # TODO: queue has timeout, use it
         """
         Get a message from the buffer.
         :param timeout: If not None and buffers is buffered, the amount

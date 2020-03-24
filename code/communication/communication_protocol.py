@@ -11,6 +11,8 @@ from message import Message,  MESSAGE_LENGTH_LENGTH, MESSAGE_TYPE_LENGTH
 
 BUFFER_SIZE = 1024  # The buffer size used when receiving and sending.
 ENCODING = "ASCII"  # The encoding used in the protocol.
+FRAG_SUFFIX = "FRAG".encode(ENCODING)
+END_FRAG_SUFFIX = "DONE".encode(ENCODING)
 
 
 def _pack_message(message):
@@ -18,6 +20,7 @@ def _pack_message(message):
     Pack a message object to bytes.
     :return: The message in bytes.
     """
+    print(f"OUT CONTENT: {len(message.content)} bytes")
     packed_content = lz4.frame.compress(message.content)
     length = len(packed_content)
     packet = (
@@ -116,3 +119,46 @@ def send_message(socket, message, timeout=None):
     """
     socket.settimeout(timeout)
     socket.sendall(_pack_message(message))
+
+
+def udp_recv(socket):  # TODO: add timeout?
+    """
+    Receive a fragmented UDP packet
+    :param socket: The socket to use when receiving
+    :return: The packet in bytes
+    """
+    packet = bytearray()
+    packet_received = False
+    while not packet_received:
+        fragment, address = socket.recvfrom(BUFFER_SIZE)
+        packet.extend(fragment[4:])
+        if fragment.startwith(END_FRAG_SUFFIX):
+            packet_received = True
+    return lz4.frame.decompress(packet)
+
+
+def _fragment(packet):
+    """
+    Fragment a packet to fragments of BUFFER_SIZE length
+    :param packet: The packet to fragment in bytes
+    :return: A list with all the fragments
+    """
+    fragments = [packet[:BUFFER_SIZE]]
+    for i in range(BUFFER_SIZE, len(packet), BUFFER_SIZE):
+        fragments.append(packet[i - BUFFER_SIZE:i])
+    return fragments
+
+
+def udp_send(socket, address, packet):
+    """
+    send a packet (fragment if needed)
+    :param socket: The socket to use when sending
+    :param address: The address to send to
+    :param packet: The data to send in bytes
+    """
+    # TODO: WHAT IF FRAGMENTS ARE NOT ORDERED!!! ADD INDEXES!!!
+    #  AND WHAT IF FRAGMENTS DROP!!!
+    fragments = _fragment(lz4.frame.compress(packet))
+    for fragment in fragments[:-1]:
+        socket.send(FRAG_SUFFIX + fragment, address)
+    socket.send(END_FRAG_SUFFIX + fragments[-1], address)

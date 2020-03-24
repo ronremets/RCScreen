@@ -319,11 +319,12 @@ WindowManager:
     controller: controller
     name: "controller"
 
-    Image:
+    StreamedImage:
         id: screen
         source: ""
         pos: (0, 0)
         size: root.size
+        nocache: True
         allow_stretch: True
 
     DynamicButton:

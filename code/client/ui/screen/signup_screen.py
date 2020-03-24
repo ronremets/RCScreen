@@ -19,9 +19,6 @@ class SignupScreen(Screen):
     username_text_input = ObjectProperty(None)
     password_text_input = ObjectProperty(None)
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
     def on_signup_button_press(self):
         """
         Signup to the server.
@@ -33,9 +30,11 @@ class SignupScreen(Screen):
         app.connection_manager.add_connector(app.username,
                                              app.password,
                                              "signup")
-        app.connection_manager.add_connection("main",
-                                              (True, True),
-                                              "main")
+        app.connection_manager.add_connection(
+            app.username,
+            "main",
+            (True, True),
+            "main")
         logging.info("MAIN:signed up")
         # if logged_in:
         self.manager.transition.direction = "up"

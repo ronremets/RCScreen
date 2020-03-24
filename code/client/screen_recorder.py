@@ -1,33 +1,31 @@
 """
 Record the screen
-TODO: maybe subclass is thread? maybe no subclass?
 """
-
 __author__ = "Ron Remets"
 
 import io
 import logging
 import threading
+import time
 
 import PIL.ImageGrab
 
-from tracker import Tracker
+from component import Component
 
-DEFAULT_SCREEN_FORMAT = "png"
+DEFAULT_SCREEN_IMAGE_FORMAT = "png"
 
 
-class ScreenRecorder(Tracker):
+class ScreenRecorder(Component):
     """
     Record the screen
     """
-
     def __init__(self):
-        super().__init__("Screen recorder")
+        super().__init__()
+        self._name = "Screen recorder"
         # Never change screen format mid recording
-        self.screen_image_format = DEFAULT_SCREEN_FORMAT
+        self.screen_image_format = None
         self._frame_lock = threading.Lock()
-        with self._frame_lock:
-            self._frame = None
+        self._frame = None
 
     @property
     def frame(self):
@@ -51,15 +49,16 @@ class ScreenRecorder(Tracker):
         Capture current frame
         """
         frame = PIL.ImageGrab.grab()
-        frame = frame.resize((720, 480))
+        frame = frame.resize((720, 480))  # TODO: make dynamic
         frame_bytes = io.BytesIO()
         frame.save(frame_bytes, self.screen_image_format)
         frame_bytes.seek(0)
         self._set_frame(frame_bytes.read())
 
-    def start(self):
+    def start(self, screen_image_format):
         """
         Start the screen capture
         """
         logging.info("Configuring the screen recorder")
-        super().start()
+        self.screen_image_format = screen_image_format
+        self._start()
