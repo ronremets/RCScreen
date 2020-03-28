@@ -1,9 +1,17 @@
 <DynamicButton@Button>:
+    font_size: self.height / 2
     texture_size: self.width / 2, self.height / 2
+    on_texture_size:
+        self.font_size = self.height / 2
+        self.texture_size = self.width / 2, self.height / 2
 
 
 <DynamicLabel@Label>:
+    font_size: self.height / 2
     texture_size: self.width / 2, self.height / 2
+    on_texture_size:
+        self.font_size = self.height / 2
+        self.texture_size = self.width / 2, self.height / 2
 
 
 WindowManager:
@@ -98,60 +106,29 @@ WindowManager:
                 root.manager.transition.direction = "left"
                 app.root.current = "login"
 
-
 <ConnectScreen>:
     name: "connect"
-    refresh_button: refresh_button
-    users_grid: users_grid
-    controller_checkbox: controller_checkbox
-    partner_text_input: partner_text_input
+    user_selector:user_selector
     partner_label: partner_label
+    controller_checkbox: controller_checkbox
+
     GridLayout:
         size: root.size
         pos: root.pos
-        rows: 4
+        rows: 3
         cols: 2
         padding:
             ((self.width / self.cols) * 0.25,
             (self.height / self.rows) * 0.2)
         spacing: (self.height / self.rows) * 0.2
 
+        UserSelector:
+            id: user_selector
+            text: "usernames"
+
         DynamicLabel:
             id: partner_label
-            text: "Partner:"
-
-        TextInput:
-            id: partner_text_input
-            text: ""
-
-        GridLayout:
-            id: users_grid
-            size: root.size
-            pos: root.pos
-            rows: 1
-            cols: 1
-            padding:
-                ((self.width / self.cols) * 0.25,
-                (self.height / self.rows) * 0.2)
-            spacing: (self.height / self.rows) * 0.2
-            DynamicLabel:
-                text: "usernames"
-
-        #DynamicButton:
-        #    id: dat_boy
-        #    text: "username"
-        #    on_press:
-        #        root.create_dropdown()
-        #        root.usernames_dropdown.open(self)
-            #DropDown:
-            #    id: usernames_dropdown
-
-        DynamicButton:
-            id: refresh_button
-            text: "Refresh"
-            on_press:
-                root.create_grid()
-
+            text: " "
 
         DynamicButton:
             text: "Connect"

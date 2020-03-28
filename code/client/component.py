@@ -12,6 +12,7 @@ class Component(object):
     Base class for controlling components
     """
     def __init__(self):
+        # TODO: is name needed?
         self._name = "Component"  # The name of the component
         self._main_thread = None
         self._running_lock = threading.Lock()

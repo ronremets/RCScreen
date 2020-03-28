@@ -23,7 +23,7 @@ class LoginScreen(Screen):
         """
         login to the server.
         """
-        print("MAIN:logging in")
+        logging.info("MAIN:logging in")
         app = App.get_running_app()
         app.username = self.username_text_input.text
         app.password = self.password_text_input.text

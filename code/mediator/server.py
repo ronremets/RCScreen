@@ -70,7 +70,7 @@ class Server(object):
         connection.socket.send(Message(
             MESSAGE_TYPES["server interaction"],
             "set partner"))
-        logging.info("set partner to :" + str(partner_username))
+        logging.info("set partner to: " + str(partner_username))
 
     def _get_all_usernames(self, connection, db_connection):
         """
@@ -79,7 +79,7 @@ class Server(object):
         :param db_connection: The connection to the database
         """
         a = db_connection.get_all_usernames()
-        print(a)
+        logging.debug(f"MAIN SERVER:Sending all usernames: {a}")
         connection.socket.send(Message(
             MESSAGE_TYPES["server interaction"],
             ", ".join(a)))
@@ -173,12 +173,15 @@ class Server(object):
             # TODO: what if connections turns from connected to not
             #  connected? these if's have to handle this
             if connection.name in user.partner.connections:
+                # TODO: what if connections are removed here from dict?
                 if user.partner.connections[connection.name].connected:
-                    buffer.add(connection.socket.recv().content)
-                    # Send an ACK
-                    connection.socket.send(Message(
-                        MESSAGE_TYPES["controlled"],
-                        "Message received"))
+                    message = connection.socket.recv(block=False).content
+                    if message is not None:
+                        buffer.add(message)
+                        # Send an ACK
+                        connection.socket.send(Message(
+                            MESSAGE_TYPES["controlled"],
+                            "Message received"))
 
     def _add_connection_to_user(self, connection, username, token):
         """
@@ -341,7 +344,8 @@ class Server(object):
             # Make sure buffers are empty before switching
             response = connection.socket.recv(block=True)
             logging.debug(
-                f"CONNECTIONS:{connection.name} connection status: {response}")
+                f"CONNECTIONS:{connection.name} "
+                f"connection status: {response.get_content_as_text()}")
         return connection, user, db_connection
 
     def _run_connection(self, connection_socket):
@@ -364,17 +368,17 @@ class Server(object):
         elif connection.type in ("keyboard - sender",
                                  "frame - sender",
                                  "mouse - sender"):
-            # TODO: put in dict and add connections with different client and server buffering
-            logging.info("connecting unbuffered socket")
+            logging.info("connecting sender socket")
             connection.socket.switch_state(False, True)
             connection.connected = True
             self._run_connection_to_partner(connection, user)
         elif connection.type in ("keyboard - receiver",
                                  "frame - receiver",
                                  "mouse - receiver"):
-            logging.info("connecting buffered socket")
+            logging.info("connecting receiver socket")
             connection.socket.switch_state(True, False)
             connection.connected = True
+            db_connection.close()
             #self._run_connection_to_partner(connection, user)
         else:
             raise ValueError("type does not exists")

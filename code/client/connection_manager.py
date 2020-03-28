@@ -102,7 +102,7 @@ class ConnectionManager(object):
             MESSAGE_TYPES["server interaction"],
             name))
         logging.debug(f"CONNECTIONS:Receiving token for {name}")
-        response = self._connector.socket.recv().content.split(b"\n")
+        response = self._connector.socket.recv().content.split(b"\n")  # TODO: is b"" same encoding? NO! fix it
         logging.debug(
             f"CONNECTIONS:Received response for token for {name}: {response}")
         return {"status": response[0].decode(), "token": response[1]}
@@ -236,6 +236,9 @@ class ConnectionManager(object):
         Add a connection to app.
         This part of add_connection is not thread safe.
         You should create connections only from the main thread.
+        However, this will put None in
+        connection_manager['connection name'] so you can be sure this
+        connection is currently connection.
         :param username: The username of the user
         :param name: The name of the connection
         :param buffer_state: a tuple like
@@ -244,15 +247,6 @@ class ConnectionManager(object):
                the server
         :param block: Wait until adding completed
         """
-        # TODO: maybe move the log in part to comm_protocol
-        # TODO: add a way to add connections
-        # TODO: connect with token you get in log in
-        # TODO: ----------very important!!!!!!!----------------
-        #          ADD A SOCKET TO MANAGE CONNECTIONS
-        #         IT WILL CHECK WHETHER THEY NEED TO CONNECTED
-        #         AND TELL THE SERVER THEY ARE TO SYNC IT
-        #                    WITH THE SOCKET
-        #       -----------------------------------------------
         logging.info(f"CONNECTIONS:Adding connection '{name}'")
         # This part of add_connection is not thread safe. You should
         # create connections only from the main thread. Because of this,

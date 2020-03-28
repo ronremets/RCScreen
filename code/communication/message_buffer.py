@@ -12,7 +12,7 @@ class MessageBuffer(object):
     """
     A buffer for storing messages
     """
-    def __init__(self, buffered=True, maxsize=100):
+    def __init__(self, buffered=True, maxsize=0):
         """
         :param buffered: The state of the buffer:
                       True - buffer the messages until you
@@ -31,16 +31,20 @@ class MessageBuffer(object):
     def switch_state(self, buffered, maxsize=0):
         """
         Switch the state of the buffer. All current messages in the
-        buffer will be dropped unless state did not change
+        buffer will be dropped
+        !unless state did not change!
         :param buffered: The state of the buffer. See the init for
                          detail.
         :param maxsize: when buffered, how many messages to store. If
                         set to 0 then buffer forever.
         """
         with self._messages_lock:
-            if (self._buffered == buffered
-                    and maxsize == self._messages.maxsize):
-                return
+            if self._buffered == buffered:
+                if self._buffered:
+                    if maxsize == self._messages.maxsize:
+                        return  # Buffered and did not change
+                else:
+                    return  # Not buffered and did not change
             self._buffered = buffered
             if buffered:
                 self._messages = queue.Queue(maxsize=maxsize)
@@ -58,32 +62,39 @@ class MessageBuffer(object):
         """
         with self._messages_lock:
             if self._buffered:
-                self._messages.put(message,
-                                   block=timeout is None,
-                                   timeout=timeout)
+                self._messages.put(
+                    message,
+                    block=not (timeout is not None and timeout == 0),
+                    timeout=timeout)
             else:
                 self._messages = message
 
-    def pop(self, timeout=None): # TODO: queue has timeout, use it
+    # TODO: timeout does not work, blocking until an items is put in the
+    #  buffer does not works since both pop and add are locked
+    def pop(self, timeout=0):
         """
         Get a message from the buffer.
-        :param timeout: If not None and buffers is buffered, the amount
-                        of time to wait before returning. If no message
-                        added until timeout, return None.
+        :param timeout: If None, block until a message is available.
+                        If 0, return immediately a message or None if
+                        no messages available. Else, block for up to
+                        the specified seconds and return None if no
+                        items available.
         :return: The message and if there is not one, return None
         """
         with self._messages_lock:
             if self._buffered:
-                if not self._messages.empty():
-                    # no dead lock because otherwise it would not
-                    # enter the if
-                    return self._messages.get(timeout=timeout)
-                return None
-            if self._messages is None:
-                return None
-            message = self._messages
-            self._messages = None
-            return message
+                try:
+                    return self._messages.get(
+                        block=not (timeout is not None and timeout == 0),
+                        timeout=timeout)
+                except queue.Empty:
+                    return None
+            else:
+                if self._messages is None:
+                    return None
+                message = self._messages
+                self._messages = None
+                return message
 
     def empty(self):
         """

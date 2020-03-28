@@ -1,7 +1,6 @@
 """
-Wrapper for socket for use in the front end.
+Wrapper for socket for sending messages.
 """
-
 __author__ = "Ron Remets"
 
 import logging
@@ -14,9 +13,16 @@ import message_buffer
 TIMEOUT = None
 
 
+class ConnectionClosed(ConnectionError):
+    """
+    Raised when a connection is closed while reading or writing to it
+    """
+    pass
+
+
 class AdvancedSocket(object):
     """
-    Wrapper for socket for use in the front end.
+    Wrapper for socket for sending messages.
     """
     def __init__(self, address=None, timeout=TIMEOUT):
         self._address = address
@@ -26,13 +32,15 @@ class AdvancedSocket(object):
         self._timeout = timeout
         self._messages_received = message_buffer.MessageBuffer()
         self._messages_to_send = message_buffer.MessageBuffer()
-        # self._messages_received_lock = threading.Lock()
-        # self._messages_to_send_lock = threading.Lock()
         self._running_lock = threading.Lock()
         self._set_running(False)
 
     @property
     def running(self):
+        """
+        Whether the socket is running
+        :return: A bool
+        """
         with self._running_lock:
             return self._running
 
@@ -47,8 +55,7 @@ class AdvancedSocket(object):
         while self.running:
             try:
                 self._messages_received.add(
-                    communication_protocol.recv_message(self._socket,
-                                                        self._timeout))
+                    communication_protocol.recv_message(self._socket))
             except socket.timeout:
                 logging.error("Socket timed out", exc_info=True)
                 self.close(kill=True)
@@ -58,7 +65,7 @@ class AdvancedSocket(object):
         Send messages until server closes
         """
         while self.running:
-            message = self._messages_to_send.pop(timeout=self._timeout)
+            message = self._messages_to_send.pop()
             if message is not None:
                 try:
                     communication_protocol.send_message(
@@ -91,8 +98,10 @@ class AdvancedSocket(object):
         """
         self._messages_to_send.add(message)
         if block_until_buffer_empty:
-            while not self._messages_to_send.empty():
+            while self.running and not self._messages_to_send.empty():
                 pass
+            if not self.running:
+                raise ConnectionClosed()
 
     def recv(self, block=True):
         """
@@ -101,8 +110,10 @@ class AdvancedSocket(object):
         :return: The message.
         """
         message_received = self._messages_received.pop()
-        while block and message_received is None:
+        while self.running and block and message_received is None:
             message_received = self._messages_received.pop()
+        if not self.running:
+            raise ConnectionClosed()
         return message_received
 
     def start(self, input_is_buffered, output_is_buffered, client_socket=None):

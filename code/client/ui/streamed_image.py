@@ -5,6 +5,7 @@ __author__ = "Ron Remets"
 
 import io
 import threading
+import logging
 
 from kivy.clock import Clock
 from kivy.properties import ObjectProperty, StringProperty
@@ -56,47 +57,25 @@ class StreamedImage(Image):
         """
         #core_image = None
         while self.running:
-            print("recv")
+            logging.debug("FRAME:Receiving frame")
             frame_bytes = self._socket.recv().content
             # Make sure server does not send any packets until we are
             # ready to receive so it does not fill the network buffer
             self._socket.send(Message(MESSAGE_TYPES["controller"],
                                       "Message received"))
-            print("update: ", len(frame_bytes))
+            logging.debug(f"FRAME:Length of frame: {len(frame_bytes)}")
             frame_data = io.BytesIO(frame_bytes)
             frame_data.seek(0)
-            #CoreImage(frame_data,
-            #          ext=self._streamed_image_format)
-            #if core_image is None:
-            #    core_image = CoreImage(frame_data,
-            #                           ext=self._streamed_image_format)
-            #else:
-            #    core_image.load_memory(frame_data,
-            #                           ext=self._streamed_image_format)
-            #frame = core_image.texture
 
-            print("frame lock")
+            logging.debug("FRAME:Giving frame to screen")
             with self._frame_lock:
-                #self.texture.blit_buffer(frame_bytes,
-                #                         colorfmt='rgb',
-                #                         bufferfmt='ubyte')\
                 self._frame = frame_data
 
-            print("new frame")
+            logging.debug("FRAME:Telling screen to take frame")
             with self._frame_is_new_lock:
                 self._frame_is_new = True
 
-            print("end")
-
-    #def _reload_frame(self, texture):
-    #    #from kivy.core.window import Window
-    #    print("changing texture")
-    #    texture.blit_buffer(self._frame,
-    #                        bufferfmt="ubyte",
-    #                        colorfmt="rgb")
-
-   # def reload_image(self, _):
-
+            logging.debug("FRAME:Finished frame cycle")
 
     def _update_frame(self, *_):
         """
@@ -112,31 +91,13 @@ class StreamedImage(Image):
             self._frame_is_new = False
         with self._frame_lock:
             frame = self._frame
-        print("creating core")
+        logging.debug("FRAME:Creating core image")
 
         self.texture = CoreImage(frame,
                                  ext=self._streamed_image_format).texture
-        #frame = self._frame
-        #arr = bytearray(len(frame))
-        #for i in range(len(frame)):
-        #    arr[i] = frame[i]
-        #EventLoop.ensure_window()
-        print("reloading")
+        logging.debug("FRAME:Reloading screen")
         self.reload()
-        print(f"STREAMED IMAGE: Updated")
-        #self.texture.reload()
-        #print("scheduling")
-        #Clock.schedule_once(self.reload_image)
-        #self.reload()
-        #self.texture.blit_buffer(self._frame,
-        #                         bufferfmt="ubyte",
-        #                         colorfmt="rgb")
-
-        #EventLoop.ensure_window()
-        #print(f"buffer format: {self.texture.bufferfmt}") # ubyte
-        #print(f"color format: {self.texture.colorfmt}")
-
-
+        logging.debug("FRAME:SCREEN UPDATED")
 
     def start(self, socket, image_format):
         """
@@ -152,16 +113,16 @@ class StreamedImage(Image):
         #self.texture.add_reload_observer(self._reload_frame)
         self._frame = None
         self._streamed_image_format = image_format
-        print(f"image format is : {self._streamed_image_format}")
+        logging.debug(f"FRAME:image format is : {self._streamed_image_format}")
         self._frame_is_new = False
         self._socket = socket
         self._receive_frame_thread = threading.Thread(
             target=self._receive_frame)
 
         self._set_running(True)
+        logging.debug("FRAME:Starting frame receiving thread")
         self._receive_frame_thread.start()
-        print('a'*50 + "scheduling")
-        from kivy.core.window import Window
+        logging.debug("FRAME:Starting screen update event")
         self._update_frame_event = Clock.schedule_interval(self._update_frame,
                                                            0)
 
