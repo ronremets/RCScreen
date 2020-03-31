@@ -49,7 +49,7 @@ class ScreenRecorder(Component):
         Capture current frame
         """
         frame = PIL.ImageGrab.grab()
-        frame = frame.resize((720, 480))  # TODO: make dynamic
+        frame = frame.resize((1920, 1080))  # TODO: make dynamic
         frame_bytes = io.BytesIO()
         frame.save(frame_bytes, self.screen_image_format)
         frame_bytes.seek(0)

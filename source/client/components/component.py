@@ -58,7 +58,9 @@ class Component(object):
         """
         logging.info(f"Starting component {self._name}")
         self._set_running(True)
-        self._main_thread = threading.Thread(target=self._run)
+        self._main_thread = threading.Thread(
+            name=f"Component {self._name} main thread",
+            target=self._run)
         self._main_thread.start()
 
     def close(self, timeout=None):

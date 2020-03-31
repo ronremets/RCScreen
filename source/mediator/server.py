@@ -14,7 +14,6 @@ import time
 from message_buffer import MessageBuffer
 from mediator.user import User
 from communication.message import Message, MESSAGE_TYPES
-from communication import communication_protocol
 from communication.advanced_socket import AdvancedSocket
 from communication.connection import Connection
 from users_database import UsersDatabase
@@ -156,15 +155,15 @@ class Server(object):
                 if user.partner.connections[connection.name].connected:
                     message = buffer.pop()
                     if message is not None:
-                        user.partner.connections[connection.name].socket.send(Message(
-                         MESSAGE_TYPES["controller"],
-                         message))
+                        user.partner.connections[connection.name].socket.send(
+                            Message(MESSAGE_TYPES["controller"],
+                                    message))
                         # Receive an ACK
                         user.partner.connections[connection.name].socket.recv()
 
-    def _run_connection_to_partner(self, connection, user):
+    def _run_connection_to_partner(self, connection, user, buffered=False):
         logging.info("starting main loop of connection to partner")
-        buffer = MessageBuffer(False)
+        buffer = MessageBuffer(buffered)
         # TODO: maybe keep a reference to this thread to join it
         #  when closing the connection
         threading.Thread(target=self._send_messages_to_partner,
@@ -175,9 +174,9 @@ class Server(object):
             if connection.name in user.partner.connections:
                 # TODO: what if connections are removed here from dict?
                 if user.partner.connections[connection.name].connected:
-                    message = connection.socket.recv(block=False).content
+                    message = connection.socket.recv(block=False)
                     if message is not None:
-                        buffer.add(message)
+                        buffer.add(message.content)
                         # Send an ACK
                         connection.socket.send(Message(
                             MESSAGE_TYPES["controlled"],
@@ -365,24 +364,28 @@ class Server(object):
         elif connection.type == "main":
             connection.connected = True
             self._run_main(connection, user, db_connection)
-        elif connection.type in ("keyboard - sender",
-                                 "frame - sender",
-                                 "mouse - sender"):
-            logging.info("connecting sender socket")
+        elif connection.type in ("keyboard - sender", "mouse - sender"):
+            logging.info("connecting buffered sender socket")
+            connection.socket.switch_state(True, True)
+            connection.connected = True
+            self._run_connection_to_partner(connection, user, buffered=True)
+        elif connection.type in ("keyboard - receiver", "mouse - receiver"):
+            logging.info("connecting buffered receiver socket")
+            connection.socket.switch_state(True, True)
+            connection.connected = True
+            db_connection.close()
+        elif connection.type == "frame - sender":
+            logging.info("connecting unbuffered sender socket")
             connection.socket.switch_state(False, True)
             connection.connected = True
             self._run_connection_to_partner(connection, user)
-        elif connection.type in ("keyboard - receiver",
-                                 "frame - receiver",
-                                 "mouse - receiver"):
-            logging.info("connecting receiver socket")
+        elif connection.type == "frame - receiver":
+            logging.info("connecting unbuffered receiver socket")
             connection.socket.switch_state(True, False)
             connection.connected = True
             db_connection.close()
-            #self._run_connection_to_partner(connection, user)
         else:
             raise ValueError("type does not exists")
-        #connection.close()
 
     def _accept_connections(self):
         """

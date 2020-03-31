@@ -3,16 +3,13 @@ This is the entry point of the client's application.
 """
 __author__ = "Ron Remets"
 
-import threading
-import time
 import logging
 
-from kivy.core.window import Window
 from kivy.app import App
 from kivy.lang import Builder
-from kivy.properties import ObjectProperty, StringProperty, BooleanProperty
+from kivy.properties import BooleanProperty, ObjectProperty, StringProperty
 
-from client.connection_manager import ConnectionManager
+from connection_manager import ConnectionManager
 
 import ui
 
@@ -38,6 +35,12 @@ class RCScreenApp(App):
         Start connection_manager
         """
         self.connection_manager.start(SERVER_ADDRESS)
+
+    def on_stop(self):
+        """
+        Close connection_manager
+        """
+        self.connection_manager.close()
 
     def build(self):
         """

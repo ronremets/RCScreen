@@ -14,7 +14,6 @@ from kivy.properties import ObjectProperty
 from kivy.clock import Clock
 
 from communication.message import Message, MESSAGE_TYPES
-from communication import communication_protocol
 
 
 class ConnectScreen(Screen):
@@ -28,16 +27,6 @@ class ConnectScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._app = App.get_running_app()
-        #self._connected_users_lock = threading.Lock()
-        #self._all_users_lock = threading.Lock()
-        #self._get_users_lock = threading.Lock()
-        #with self._get_users_lock:
-        #    self._get_users = True
-        #self._connected_users = None
-        #self._all_users = None
-        #self._get_users_thread = None
-        # TODO: add one socket for users update and for one for
-        #  set partner and connect
 
     def connect_to_partner(self):
         # TODO: run this on another thread and check progress in main

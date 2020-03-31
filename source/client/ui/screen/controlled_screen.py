@@ -9,10 +9,11 @@ import time
 import logging
 
 import win32api
+import win32con
 from kivy.app import App
 from kivy.uix.screenmanager import Screen
 
-from client.screen_streamer import ScreenStreamer
+from client.components.screen_streamer import ScreenStreamer
 from communication.message import Message, MESSAGE_TYPES
 
 
@@ -64,23 +65,37 @@ class ControlledScreen(Screen):
         """
         Get the position og the mouse and move it to there
         """
-        while "mouse tracker" not in self._app.connection_manager.connections.keys():
-            pass
-        while not self._app.connection_manager.connections["mouse tracker"] is not None:
+        while self._app.connection_manager.connections["mouse tracker"] is None:
             pass
         while not self._app.connection_manager.connections["mouse tracker"].connected:
             pass
         logging.info(f"CONNECTIONS:Mouse is running")
+        old_info = 0, 0, "released", "released"
         while self.running:
             # logging.debug("Updating mouse movement")
-            point = self._app.connection_manager.connections["mouse tracker"].socket.recv().get_content_as_text()
+            info = self._app.connection_manager.connections["mouse tracker"].socket.recv().get_content_as_text()
             self._app.connection_manager.connections[
                 "mouse tracker"].socket.send(Message(MESSAGE_TYPES["controller"],
                                                      "Message received"))
-            #x, y = point[1:-1].split(",")
-            #x, y = int(x), int(y)
-            logging.debug(point)
-            # win32api.SetCursorPos((x, y))
+            x, y, lbtn, rbtn = info.split(",")
+            try:
+                x, y = int(x), int(y)
+                logging.debug(f"MOUSE:Mouse info: {info}")
+                win32api.SetCursorPos((x, y))
+                if lbtn != old_info[2]:
+                    print("pressed left")
+                    win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, x, y, 0, 0)
+                    time.sleep(0.1)
+                    win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, x, y, 0, 0)
+                if rbtn != old_info[3]:
+                    print("pressed right")
+                    win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTDOWN, x, y, 0, 0)
+                    time.sleep(0.1)
+                    win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTUP, x, y, 0, 0)
+            except Exception as e:
+                print(e)
+            finally:
+                old_info = x, y, lbtn, rbtn
 
     def on_enter(self, *args):
         """
@@ -98,7 +113,7 @@ class ControlledScreen(Screen):
         self._app.connection_manager.add_connection(
             self._app.username,
             "mouse tracker",
-            (False, True),#(False, True),
+            (True, True),#(False, True),
             "mouse - receiver",
             block=True)
         logging.info("Starting screen recorder")

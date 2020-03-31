@@ -4,8 +4,7 @@ A message for communicating through sockets
 
 __author__ = "Ron Remets"
 
-import communication_protocol
-
+ENCODING = "ASCII"  # The encoding used in the protocol.
 # The length of the length of the message content
 MESSAGE_LENGTH_LENGTH = 16
 MESSAGE_TYPE_LENGTH = 1  # The length of the type of the message
@@ -43,7 +42,7 @@ class Message(object):
             raise ValueError(f"Message can not be longer than"
                              f" {MESSAGE_LENGTH_LENGTH}")
         if isinstance(value, str):
-            self._content = value.encode(communication_protocol.ENCODING)
+            self._content = value.encode(ENCODING)
         else:
             self._content = value
 
@@ -70,4 +69,4 @@ class Message(object):
         """
         :return: The content decoded as text
         """
-        return self.content.decode(communication_protocol.ENCODING)
+        return self.content.decode(ENCODING)

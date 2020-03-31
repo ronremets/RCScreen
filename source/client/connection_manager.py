@@ -53,12 +53,14 @@ class ConnectionManager(object):
         with self._connections_lock:
             return self._connections
 
-    def _add_connector(self, username, password, method):
+    def _add_connector(self, username, password, method, callback=None):
         """
         Add a connection that connects other connection to the server
         :param username: The username of the user
         :param password: The password of the user
         :param method: Whether to log in or to sign up
+        :param callback: The function to call after connecting
+                         (From the connecting thread)
         """
         self._connector.socket.start(True, True)
         logging.debug(f"CONNECTION:Sending connector method: {method}")
@@ -82,14 +84,14 @@ class ConnectionManager(object):
         connection_status = self._connector.socket.recv().get_content_as_text()
         logging.info(
             f"CONNECTIONS:Connection status of connector: {connection_status}")
-        # TODO: admin cam send disconnect message so make sure connector can
-        #  receive random messages from server
         # A system admin can send a disconnect request. As a result,
         # we need to make sure connector is ready to receive commands
         # before it is considered connected but because it uses TCP
         # the command must come after 'connected' message and so
         # we dont need to send 'connected' from connector
         self._connector.connected = True
+        if callback is not None:
+            callback(connection_status)
 
     def _get_token(self, name):
         """
@@ -108,25 +110,27 @@ class ConnectionManager(object):
         return {"status": response[0].decode(), "token": response[1]}
 
     # TODO: change to just token (get_token_from_connector)
-    def _run_connector(self, username, password, method):
+    def _run_connector(self, username, password, method, callback=None):
         """
         Add the connector and run it's main loop until disconnected.
         :param username: The username of the user
         :param password: The password of the user
         :param method: The method to add the connector (see _add_connector)
+        :param callback: The function to call after connecting
+                         (From the connecting thread)
         """
-        self._add_connector(username, password, method)
+        self._add_connector(username, password, method, callback=callback)
         while self.running:
             try:
                 name = self._token_requests.get(block=False)  # TODO: timeout?
             except queue.Empty:  # TODO: any better way to do this?
-                name = None
-            if name is not None:
+                pass
+            else:
                 token = self._get_token(name)  # TODO: what if this crashes?
                 with self._tokens_lock:
                     self._tokens[name] = token
 
-    def add_connector(self, username, password, method):
+    def add_connector(self, username, password, method, callback=None):
         """
         Add the connector connection.
         This is not thread safe.
@@ -134,19 +138,22 @@ class ConnectionManager(object):
         :param username: The username of the user
         :param password: The password of the user
         :param method: Whether to log in or to sign up
+        :param callback: The function to call after connecting
+                         (From the connecting thread)
         """
         # This part of add_connector is not thread safe. You should
         # create connections only from the main thread. Because of this,
         # we do not have to maintain lock to self._connector.running
-        # between checking if a connection exists and setting it to None
+        # between checking if a connection exists and starting it
         if self._connector.running:
             raise ValueError("Connector already exists")
         # Let other threads know this connection is in the middle of
         # connecting
         self._connector.start()
         self._connector_thread = threading.Thread(
+            name="Connector connect thread",
             target=self._run_connector,
-            args=(username, password, method))
+            args=(username, password, method, callback))
         self._connector_thread.start()
 
     def _connect_connection(self, connection, username, token, buffer_state):
@@ -196,7 +203,8 @@ class ConnectionManager(object):
                         username,
                         name,
                         buffer_state,
-                        connection_type):
+                        connection_type,
+                        callback=None):
         """
         Add a connection to app. Only call this after sign in or log in.
         :param username: The username of the user
@@ -205,6 +213,8 @@ class ConnectionManager(object):
                (input is buffered, output is buffered)
         :param connection_type: The type of connection to report to
                the server
+        :param callback: The function to call after connecting
+                         (From the connecting thread)
         """
         # Request token
         self._token_requests.put(name, block=True)
@@ -225,13 +235,16 @@ class ConnectionManager(object):
                                      buffer_state)
         else:
             raise ValueError("TOKEN ERROR")
+        if callback is not None:
+            callback(response)
 
     def add_connection(self,
                        username,
                        name,
                        buffer_state,
                        connection_type,
-                       block=False):
+                       block=False,
+                       callback=None):
         """
         Add a connection to app.
         This part of add_connection is not thread safe.
@@ -246,6 +259,8 @@ class ConnectionManager(object):
         :param connection_type: The type of connection to report to
                the server
         :param block: Wait until adding completed
+        :param callback: The function to call after connecting
+                         (From the connecting thread)
         """
         logging.info(f"CONNECTIONS:Adding connection '{name}'")
         # This part of add_connection is not thread safe. You should
@@ -257,11 +272,13 @@ class ConnectionManager(object):
         # Let other threads know this connection is in the middle of
         # connecting
         self.connections[name] = None
-        add_thread = threading.Thread(target=self._add_connection,
+        add_thread = threading.Thread(name=f"Connection {name} connect thread",
+                                      target=self._add_connection,
                                       args=(username,
                                             name,
                                             buffer_state,
-                                            connection_type))
+                                            connection_type,
+                                            callback))
         add_thread.start()
         if block:
             add_thread.join()  # TODO: remove block as there is not need for it
@@ -310,6 +327,8 @@ class ConnectionManager(object):
             #  => never set this to None
             #  cant use lock cuz of deadlock. its trying to set to none and
             #  join at the same time but the joined thread is locked
+            for connection in self.connections.values():
+                connection.close(kill=True)
             if self._connector_thread is not None:
                 self._connector_thread.join()
         # TODO: if a socket crashes, it will try to reconnect X times

@@ -1,5 +1,5 @@
 """
-Send the keyboard state through a socket
+Track the state of the keyboard
 """
 __author__ = "Ron Remets"
 
@@ -10,7 +10,7 @@ from kivy.uix.widget import Widget
 from communication.message import Message, MESSAGE_TYPES
 
 
-class KeyboardStreamer(Widget):
+class KeyboardTracker(Widget):
     """
     Send the keyboard state through a socket
     """
