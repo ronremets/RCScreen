@@ -6,8 +6,8 @@ __author__ = "Ron Remets"
 import logging
 
 from communication.message import Message, MESSAGE_TYPES
-from component import Component
-from screen_recorder import ScreenRecorder
+from components.component import Component
+from components.screen_recorder import ScreenRecorder
 
 
 class ScreenStreamer(Component):
@@ -18,37 +18,45 @@ class ScreenStreamer(Component):
         super().__init__()
         self._name = "Screen streamer"
         self._connection = None
-        self._screen_recorder = ScreenRecorder()
+        self._can_send_frame = True
+        self.screen_recorder = ScreenRecorder()  # TODO: Lock?
 
-    def _setup(self):
+    def _send_frame(self):
         """
-        setup the connection
+        Send a frame to through the socket
         """
-        while not self._connection.connected:
-            pass
-        logging.info("Screen connected")
+        frame = self.screen_recorder.frame
+        if frame is not None:
+            self._connection.socket.send(Message(
+                MESSAGE_TYPES["controlled"],
+                frame))
+            self._can_send_frame = False
+
+    def _check_if_can_send_frame(self):
+        """
+        Check if the connection is ready to receive another frame
+        """
+        response = self._connection.socket.recv(block=False)
+        if response is not None:
+            self._can_send_frame = True
 
     def _update(self):
         """
         Send the next frame
         """
-        frame = self._screen_recorder.frame
-        if frame is not None:
-            self._connection.socket.send(Message(
-                MESSAGE_TYPES["controlled"],
-                frame))
-            # Make sure server is ready to receive another frame
-            self._connection.socket.recv()
+        if self._can_send_frame:
+            self._send_frame()
+        else:
+            self._check_if_can_send_frame()
 
-    def start(self, connection, screen_image_format):
+    def start(self, connection):
         """
         Start the recording and streaming
         :param connection: The connection to use to stream
-        :param screen_image_format: The format to use when streaming
         """
         self._connection = connection
-        # TODO: add timeout for socket
-        self._screen_recorder.start(screen_image_format)
+        self._can_send_frame = True
+        self.screen_recorder.start()
         self._start()
 
     def close(self, timeout=None):
@@ -59,5 +67,5 @@ class ScreenStreamer(Component):
         """
         # TODO: keep timeout time between all closing!!!
         super().close(timeout)
-        if self._screen_recorder is not None:
-            self._screen_recorder.close(timeout)
+        if self.screen_recorder is not None:
+            self.screen_recorder.close(timeout)

@@ -62,7 +62,8 @@ class ConnectionManager(object):
         :param callback: The function to call after connecting
                          (From the connecting thread)
         """
-        self._connector.socket.start(True, True)
+        socket = AdvancedSocket.create_connected_socket(self._server_address)
+        self._connector.socket.start(socket, True, True)
         logging.debug(f"CONNECTION:Sending connector method: {method}")
         self._connector.socket.send(Message(
             MESSAGE_TYPES["server interaction"],
@@ -156,7 +157,13 @@ class ConnectionManager(object):
             args=(username, password, method, callback))
         self._connector_thread.start()
 
-    def _connect_connection(self, connection, username, token, buffer_state):
+    def _connect_connection(self,
+                            connection,
+                            username,
+                            token,
+                            buffer_state,
+                            only_send=False,
+                            only_recv=False):
         """
         Connect a connection to the server
         :param connection: a Connection object ot connect
@@ -164,6 +171,11 @@ class ConnectionManager(object):
         :param token: The token to use to connect
         :param buffer_state: The buffer's state of the connection
                              (See AdvancedSocket)
+        :param only_send: Whether the connection only needs to send
+                          packets
+        :param only_recv: Whether the connection only needs to recv
+                          packets
+        :return connection status: A string with the connection status
         """
         logging.debug("CONNECTIONS:Sending method: token")
         connection.socket.send(Message(
@@ -185,9 +197,10 @@ class ConnectionManager(object):
 
         # Make sure the server is ready to start the main loop and
         # switch buffers states
-        response = connection.socket.recv().get_content_as_text()
+        connection_status = connection.socket.recv().get_content_as_text()
         logging.debug(
-            f"CONNECTIONS:{connection.name} connection status: {response}")
+            f"CONNECTIONS:{connection.name} "
+            f"connection status: {connection_status}")
         # Make sure buffers are empty before switching
         connection.socket.send(Message(
             MESSAGE_TYPES["server interaction"],
@@ -197,14 +210,21 @@ class ConnectionManager(object):
             f"CONNECTIONS:{connection.name} sent ready")
         connection.socket.switch_state(*buffer_state)
         self.connections[connection.name] = connection
+        if only_recv:
+            connection.socket.close_send_thread()
+        if only_send:
+            connection.socket.close_recv_thread()
         connection.connected = True
+        return connection_status
 
     def _add_connection(self,
                         username,
                         name,
                         buffer_state,
                         connection_type,
-                        callback=None):
+                        callback=None,
+                        only_send=False,
+                        only_recv=False):
         """
         Add a connection to app. Only call this after sign in or log in.
         :param username: The username of the user
@@ -215,28 +235,39 @@ class ConnectionManager(object):
                the server
         :param callback: The function to call after connecting
                          (From the connecting thread)
+        :param only_send: Whether the connection only needs to send
+                          packets
+        :param only_recv: Whether the connection only needs to recv
+                          packets
         """
         # Request token
-        self._token_requests.put(name, block=True)
+        self._token_requests.put(name, block=True)  # TODO: Block? why? how?
         # Wait for connector to get a token
         while True:  # TODO: add timeout or error in response that is timeout
             with self._tokens_lock:
                 if name in self._tokens:
-                    response = self._tokens[name]  # TODO: error can be client timeout
+                    response = self._tokens.pop(name)  # TODO: error can be client timeout
                     break
         if response["status"] == "ok":
             connection = Connection(name,
-                                    AdvancedSocket(self._server_address),
+                                    AdvancedSocket(),
                                     connection_type)
-            connection.socket.start(True, True)
-            self._connect_connection(connection,
-                                     username,
-                                     response["token"],
-                                     buffer_state)
+            # Create and connect a socket. If the an exception is raised
+            # while connecting, the socket will close automatically.
+            socket = AdvancedSocket.create_connected_socket(
+                self._server_address)
+            connection.socket.start(socket, True, True)
+            connection_status = self._connect_connection(connection,
+                                                         username,
+                                                         response["token"],
+                                                         buffer_state,
+                                                         only_send,
+                                                         only_recv)
         else:
-            raise ValueError("TOKEN ERROR")
+            # raise ValueError("TOKEN ERROR") TODO: is this what you want?
+            connection_status = "TOKEN ERROR"  # TODO: or this?
         if callback is not None:
-            callback(response)
+            callback(connection_status)
 
     def add_connection(self,
                        username,
@@ -244,7 +275,9 @@ class ConnectionManager(object):
                        buffer_state,
                        connection_type,
                        block=False,
-                       callback=None):
+                       callback=None,
+                       only_recv=False,
+                       only_send=False):
         """
         Add a connection to app.
         This part of add_connection is not thread safe.
@@ -261,6 +294,10 @@ class ConnectionManager(object):
         :param block: Wait until adding completed
         :param callback: The function to call after connecting
                          (From the connecting thread)
+        :param only_send: Whether the connection only needs to send
+                          packets
+        :param only_recv: Whether the connection only needs to recv
+                          packets
         """
         logging.info(f"CONNECTIONS:Adding connection '{name}'")
         # This part of add_connection is not thread safe. You should
@@ -278,7 +315,9 @@ class ConnectionManager(object):
                                             name,
                                             buffer_state,
                                             connection_type,
-                                            callback))
+                                            callback,
+                                            only_send,
+                                            only_recv))
         add_thread.start()
         if block:
             add_thread.join()  # TODO: remove block as there is not need for it
@@ -310,7 +349,7 @@ class ConnectionManager(object):
         self._tokens = {}
         # A connection that adds other connections
         self._connector = Connection("connector",
-                                     AdvancedSocket(server_address),
+                                     AdvancedSocket(),
                                      "connector")
         self._set_running(True)
 

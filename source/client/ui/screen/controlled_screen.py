@@ -8,12 +8,13 @@ import threading
 import time
 import logging
 
-import win32api
-import win32con
 from kivy.app import App
+from kivy.clock import Clock
 from kivy.uix.screenmanager import Screen
+from kivy.properties import ObjectProperty
 
-from client.components.screen_streamer import ScreenStreamer
+from components.mouse_controller import MouseController
+from components.screen_streamer import ScreenStreamer
 from communication.message import Message, MESSAGE_TYPES
 
 
@@ -21,132 +22,65 @@ class ControlledScreen(Screen):
     """
     The screen where the client is controlled by another client.
     """
+    mouse_controller = ObjectProperty(MouseController())
+    screen_streamer = ObjectProperty(ScreenStreamer())
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._screen_update_thread = None
-        self._mouse_movement_update_thread = None
-        self._mouse_click_update_thread = None
-        self._screen_streamer = ScreenStreamer()
-        self._running_lock = threading.Lock()
         self._app = App.get_running_app()
-        self._set_running(False)
+        self._running_lock = threading.Lock()
 
-    @property
-    def running(self):
+    def _start_mouse_controller(self, connection_status):
         """
-        Check if the client is running.
-        :return: True if it is, otherwise False
+        Start the mouse_controller.
+        :param connection_status: The connection status of the
+                                  connection used to by the mouse
         """
-        with self._running_lock:
-            return self._running
+        self.mouse_controller.start(
+            self._app.connection_manager.connections["mouse tracker"])
 
-    def _set_running(self, value):
-        with self._running_lock:
-            self._running = value
-
-    """def _send_frame(self):
-        
-        while "screen recorder" not in self._app.connection_manager.connections.keys():
-            pass
-        while not self._app.connection_manager.connections["screen recorder"] is not None:
-            pass
-        while not self._app.connection_manager.connections["screen recorder"].connected:
-            pass
-        while self.running:
-            frame = self._screen_recorder.frame
-            # It's None until recording starts or if the frame didn't change
-            if frame is not None:
-                self._app.connection_manager.connections["screen recorder"].send(Message(
-                    MESSAGE_TYPES["controlled"],
-                    frame))"""
-
-    def _mouse_movement_update(self):
+    def _start_screen_streamer(self, connection_status):
         """
-        Get the position og the mouse and move it to there
+        Start the screen streamer.
+        :param connection_status: The connection status of the
+                                  connection used to stream
         """
-        while self._app.connection_manager.connections["mouse tracker"] is None:
-            pass
-        while not self._app.connection_manager.connections["mouse tracker"].connected:
-            pass
-        logging.info(f"CONNECTIONS:Mouse is running")
-        old_info = 0, 0, "released", "released"
-        while self.running:
-            # logging.debug("Updating mouse movement")
-            info = self._app.connection_manager.connections["mouse tracker"].socket.recv().get_content_as_text()
-            self._app.connection_manager.connections[
-                "mouse tracker"].socket.send(Message(MESSAGE_TYPES["controller"],
-                                                     "Message received"))
-            x, y, lbtn, rbtn = info.split(",")
-            try:
-                x, y = int(x), int(y)
-                logging.debug(f"MOUSE:Mouse info: {info}")
-                win32api.SetCursorPos((x, y))
-                if lbtn != old_info[2]:
-                    print("pressed left")
-                    win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, x, y, 0, 0)
-                    time.sleep(0.1)
-                    win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, x, y, 0, 0)
-                if rbtn != old_info[3]:
-                    print("pressed right")
-                    win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTDOWN, x, y, 0, 0)
-                    time.sleep(0.1)
-                    win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTUP, x, y, 0, 0)
-            except Exception as e:
-                print(e)
-            finally:
-                old_info = x, y, lbtn, rbtn
+        #self.screen_streamer.screen_recorder.image_format = self._app.screen_image_format
+        self.screen_streamer.start(
+            self._app.connection_manager.connections["screen recorder"])
 
     def on_enter(self, *args):
         """
-        When this screen starts, start showing the screen.
+        When this screen starts, start recording the screen.
         """
-        self._set_running(True)
+        logging.info("Creating mouse tracker connection")
+        self._app.connection_manager.add_connection(
+            self._app.username,
+            "mouse tracker",
+            (True, True),
+            "mouse - receiver",
+            block=False,
+            callback=self._start_mouse_controller,
+            only_recv=True)
         logging.info("Creating screen recorder connection")
         self._app.connection_manager.add_connection(
             self._app.username,
             "screen recorder",
             (True, False),
             "frame - sender",
-            block=True)
-        logging.info("Creating mouse tracker connection")
-        self._app.connection_manager.add_connection(
-            self._app.username,
-            "mouse tracker",
-            (True, True),#(False, True),
-            "mouse - receiver",
-            block=True)
-        logging.info("Starting screen recorder")
-        self._screen_streamer.start(
-            self._app.connection_manager.connections["screen recorder"],
-            self._app.screen_image_format)
-        logging.info("Starting updates")
-        #self._screen_update_thread = threading.Thread(
-        #    target=self._send_frame)
-        self._mouse_movement_update_thread = threading.Thread(
-            target=self._mouse_movement_update)
-        # self._mouse_click_update_thread = threading.Thread(
-        #     target=None)
-        #self._screen_update_thread.start()
-        self._mouse_movement_update_thread.start()
-        # self._mouse_click_update_thread.start()
-        logging.info("Started updates")
+            block=False,
+            callback=self._start_screen_streamer)
 
     def on_leave(self, *args):
         """
         When this screen stops, wait for screen to stop.
         """
         # TODO: what happens if sockets die before self.connected but running?
-        self._set_running(False)
-        self._screen_streamer.close()
-        # TODO: blocking main thread here, add timeout or kill or something
-        # self._screen_update_thread.join()
-        self._mouse_movement_update_thread.join()
-        # self._mouse_click_update_thread.join()
+        self.screen_streamer.close()
+        self.mouse_controller.close()
         try:
             # TODO: change kill to False
-            self._app.connection_manager.close_connection("screen recorder", True)
-            self._app.connection_manager.close_connection("mouse movement tracker", True)
-            # self._app.connections["mouse click tracker"].close(kill=True)
+            self._app.connection_manager.close_connection("screen recorder", False)
+            self._app.connection_manager.close_connection("mouse tracker", False)
         except Exception as e:
             logging.error(f"socket error while closing screen recorder: {e}")

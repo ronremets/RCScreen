@@ -4,15 +4,26 @@ This is the entry point of the client's application.
 __author__ = "Ron Remets"
 
 import logging
+import pkg_resources.py2_warn
 
 from kivy.app import App
 from kivy.lang import Builder
-from kivy.properties import BooleanProperty, ObjectProperty, StringProperty
+from kivy.properties import (BooleanProperty,
+                             NumericProperty,
+                             ObjectProperty,
+                             StringProperty)
 
 from connection_manager import ConnectionManager
 
 import ui
-
+# Tree("D:\\Programming\\Python\\RCScreen\\source\\client\\components"),
+# Tree("D:\\Programming\\Python\\RCScreen\\source\\client\\ui\\screen", prefix="screen"),
+# Tree("D:\\Programming\\Python\\RCScreen\\source\\client\\ui\\popup", prefix="popup"),
+# Tree("D:\\Programming\\Python\\RCScreen\\source\\client\\ui", prefix="ui", excludes=["screen", "popup"]),
+# Tree("D:\\Programming\\Python\\RCScreen\\source\\client", excludes=["components", "ui"]),
+# Tree("D:\\Programming\\Python\\RCScreen\\source\\communication", prefix="communication"),
+# Tree("C:\\Program Files\\Python37\\Lib\\site-packages\\lz4", prefix='lz4'),
+# Tree("C:\\Program Files\\Python37\\Lib\\site-packages\\PIL", prefix="PIL"),
 SERVER_ADDRESS = ("127.0.0.1", 2125)
 logging.basicConfig(level=logging.DEBUG)
 
@@ -29,6 +40,8 @@ class RCScreenApp(App):
     is_controller = BooleanProperty(False)
     partner = StringProperty("")
     connection_manager = ObjectProperty(ConnectionManager())
+    x_sensitivity = NumericProperty(10, min=0)
+    y_sensitivity = NumericProperty(10, min=0)
 
     def on_start(self):
         """

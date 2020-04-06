@@ -150,23 +150,39 @@ class Server(object):
         :param user: The user sending the messages
         :param buffer: A reference to the buffer of messages to send
         """
+        can_send_message = True
         while self.running:  # TODO: not self.running but connection.running
             if connection.name in user.partner.connections:
                 if user.partner.connections[connection.name].connected:
                     message = buffer.pop()
-                    if message is not None:
+                    if message is not None and can_send_message:
                         user.partner.connections[connection.name].socket.send(
-                            Message(MESSAGE_TYPES["controller"],
-                                    message))
+                            message)
+                        can_send_message = False
+                    elif not can_send_message:
                         # Receive an ACK
-                        user.partner.connections[connection.name].socket.recv()
+                        response = user.partner.connections[connection.name].socket.recv(block=False)
+                        if response is not None:
+                            can_send_message = True
 
     def _run_connection_to_partner(self, connection, user, buffered=False):
+        """
+        Run a connection that sends data to the partner of the user
+        and are buffered.
+        :param connection: The connection that sends data.
+        :param user: The user of the connection.
+        :param buffered: Whether to buffer between receiving from one
+                         side and sending to the other. Decreases packet
+                         drops but increases latency.
+        """
         logging.info("starting main loop of connection to partner")
         buffer = MessageBuffer(buffered)
         # TODO: maybe keep a reference to this thread to join it
         #  when closing the connection
-        threading.Thread(target=self._send_messages_to_partner,
+        threading.Thread(
+                         name=(f"Connection to partner {connection.name} of"
+                               f"User {user.username} to {user.partner}"),
+                         target=self._send_messages_to_partner,
                          args=(connection, user, buffer)).start()
         while self.running:
             # TODO: what if connections turns from connected to not
@@ -176,11 +192,30 @@ class Server(object):
                 if user.partner.connections[connection.name].connected:
                     message = connection.socket.recv(block=False)
                     if message is not None:
-                        buffer.add(message.content)
+                        buffer.add(message)
                         # Send an ACK
                         connection.socket.send(Message(
                             MESSAGE_TYPES["controlled"],
                             "Message received"))
+
+    def _run_buffered_connection_to_partner(self, connection, user):
+        """
+        Run a connection that sends data to the partner of the user
+        and is buffered.
+        :param connection: The connection that sends data.
+        :param user: The user of the connection.
+        """
+        logging.info("starting main loop of buffered connection to partner")
+        while self.running:
+            # TODO: what if connections turns from connected to not
+            #  connected? these if's have to handle this
+            if connection.name in user.partner.connections:
+                # TODO: what if connections are removed here from dict?
+                if user.partner.connections[connection.name].connected:
+                    message = connection.socket.recv(block=False)
+                    if message is not None:
+                        user.partner.connections[connection.name].socket.send(
+                            message)
 
     def _add_connection_to_user(self, connection, username, token):
         """
@@ -309,11 +344,9 @@ class Server(object):
         :param connection_socket: The socket of the connection.
         :return: Connection object and its user object
         """
-        # TODO: replace the address default parameter with a parameter
-        #  that tells the socket to not create a new socket
         connection_advanced_socket = AdvancedSocket()
-        connection_advanced_socket.start(True, True, connection_socket)
-        # TODO: maybe connect both recv to one. remember that some
+        connection_advanced_socket.start(connection_socket, True, True)
+        # TODO: maybe connect both recv to one. However, remember that some
         #  methods might not work in one recv
         connecting_method = connection_advanced_socket.recv(
             ).get_content_as_text()
@@ -357,7 +390,6 @@ class Server(object):
         logging.info(
             f"CONNECTIONS:Selecting main loop"
             f"for connection {connection.name}")
-        # TODO: fix: getpeerbyname might not be supported on all systems
         if connection.type == "connector":
             connection.connected = True
             self._run_connector(connection, user, db_connection)
@@ -367,11 +399,24 @@ class Server(object):
         elif connection.type in ("keyboard - sender", "mouse - sender"):
             logging.info("connecting buffered sender socket")
             connection.socket.switch_state(True, True)
+            # (Does not block) Senders do not need to receive any data.
+            # Therefore, the server will never send to them data and
+            # thus, their sending threads can be closed to conserve CPU
+            # usage.
+            logging.debug(
+                f"closing send thread of connection {connection.name}")
+            connection.socket.close_send_thread()
             connection.connected = True
-            self._run_connection_to_partner(connection, user, buffered=True)
+            self._run_buffered_connection_to_partner(connection, user)
         elif connection.type in ("keyboard - receiver", "mouse - receiver"):
             logging.info("connecting buffered receiver socket")
             connection.socket.switch_state(True, True)
+            # (Does not block) Receivers do not need to send any data.
+            # Therefore, the server will never receive from them data
+            # and thus, their receiving threads can be closed to conserve
+            # CPU usage.
+            logging.debug(f"closing recv thread of connection {connection.name}")
+            connection.socket.close_recv_thread()
             connection.connected = True
             db_connection.close()
         elif connection.type == "frame - sender":
@@ -385,7 +430,7 @@ class Server(object):
             connection.connected = True
             db_connection.close()
         else:
-            raise ValueError("type does not exists")
+            raise ValueError("Connection type does not exists")
 
     def _accept_connections(self):
         """

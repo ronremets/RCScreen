@@ -5,15 +5,14 @@ __author__ = "Ron Remets"
 
 from kivy.app import App
 from kivy.clock import Clock
-from kivy.properties import NumericProperty, ObjectProperty, BooleanProperty
+from kivy.properties import ObjectProperty, BooleanProperty
 from kivy.uix.button import Button
 from kivy.uix.dropdown import DropDown
 
 from communication.message import Message, MESSAGE_TYPES
 from communication.advanced_socket import ConnectionClosed
 
-DEFAULT_BATCH_HEIGHT = 3
-UPDATE_USERS_REFRESH_RATE = 3
+UPDATE_USERS_REFRESH_RATE = 1.5
 
 
 def _select_user(instance, username):
