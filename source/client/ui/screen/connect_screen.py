@@ -16,6 +16,14 @@ from kivy.clock import Clock
 from communication.message import Message, MESSAGE_TYPES
 
 
+def timeit(func):
+    def _check_if_connected_to_partner(*args, **kwargs):
+        b = time.time()
+        out = func(*args, **kwargs)
+        a = time.time()
+        print("The function took:", a - b)
+        return out
+    return _check_if_connected_to_partner
 class ConnectScreen(Screen):
     """
     The screen where the client connects to another client
@@ -27,18 +35,17 @@ class ConnectScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._app = App.get_running_app()
+        #self._app.bind(on_partner=self._update_selection)
 
-    def connect_to_partner(self):
-        # TODO: run this on another thread and check progress in main
-        #  thread
-        # TODO: is main connected? check here or assume it is connected?
-        logging.debug(f"MAIN:Sending set partner: {self._app.partner}")
-        self._app.connection_manager.connections["main"].socket.send(Message(
-            MESSAGE_TYPES["server interaction"],
-            f"set partner\n{self._app.partner}"))
-        response = self._app.connection_manager.connections["main"].socket.recv(block=True)
-        response = response.get_content_as_text()
-        logging.debug(f"MAIN:answer to partner: {response}")
+    def connect(self):
+        """
+        Start to connect to partner.
+        TODO: CHANGE NAME TO SOMETHING LIKE SWITCH TO CONTROL SCREEN
+        """
+        self._app.is_controller = self.controller_checkbox.active
+        self.manager.transition.direction = "left"
+        self._app.root.current = (
+            "controller" if self._app.is_controller else "controlled")
 
     def _update_selection(self, instance, username):
         """
@@ -48,31 +55,28 @@ class ConnectScreen(Screen):
         logging.info(f"Selected partner: {username}")
         self.partner_label.text = username
 
-    def start_user_selector(self):
+    def start_user_selector(self, connection_status):
         """
-        Wait for the connection to start then start the user selector
+        Start the user selector
+        :param connection_status: The connection status of the get users
+                                  connection
         """
-        while self._app.connection_manager.connections["get users"] is None:
-            if not self._app.connection_manager.running:
-                raise NotImplementedError()  # TODO: what happens when closed?
-        connection = self._app.connection_manager.connections["get users"]
-        while not connection.connected:
-            if not self._app.connection_manager.running:
-                raise NotImplementedError()  # TODO: what happens when closed?
-        self.user_selector.start(connection)
+        self.user_selector.start(
+            self._app.connection_manager.connections["get users"])
 
     def on_enter(self):
         """
         Start all the components and connections
         """
-        self._app.bind(partner=self._update_selection)
+        #self._app(on_partner=lambda value:)
+        #self.partner_label.bind(text=self._app.partner)
         self._app.connection_manager.add_connection(
             self._app.username,
             "get users",
             (True, True),
             "main",
-            block=False)
-        threading.Thread(target=self.start_user_selector).start()
+            block=False,
+            callback=self.start_user_selector)
 
     def on_pre_leave(self):
         """
@@ -82,7 +86,7 @@ class ConnectScreen(Screen):
         self.user_selector.close()
         logging.warning("Trying to crash socket")
         try:
-            self._app.connection_manager.close_connection("get users", True)
+            self._app.connection_manager.close_connection("get users", False)
         except Exception as e:
             logging.error("socket error while closing: " + str(e))
         logging.debug("closed connection to get users")

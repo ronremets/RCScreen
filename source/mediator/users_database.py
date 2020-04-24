@@ -19,6 +19,10 @@ class UsersDatabase(object):
 
     @staticmethod
     def create_database(db_file_name):
+        """
+        create the database.
+        :param db_file_name: The name of the file that will be created.
+        """
         try:
             connection = sqlite3.connect(db_file_name)
             cursor = connection.cursor()
@@ -50,6 +54,8 @@ class UsersDatabase(object):
         :param password: The password of the user.
         :return: The username and password.
         """
+        # TODO: Get username return password of check if user exists
+        #  and return bool or dont use this function.
         self._cursor.execute(
             "SELECT username, password FROM users\n"
             "WHERE username = ? and password = ?",
@@ -58,6 +64,21 @@ class UsersDatabase(object):
         if result is None:
             raise ValueError("No such user")
         return result[0], result[1]
+
+    def get_password(self, username):
+        """
+        Get the password of a username.
+        :param username: The username to get the password of.
+        :return: The password of the username as a string.
+        """
+        self._cursor.execute(
+            "SELECT password FROM users\n"
+            "WHERE username = ?",
+            (username,))
+        result = self._cursor.fetchone()
+        if result is None:
+            raise ValueError("No such user")
+        return result[0]
 
     def delete_user(self, username, password):
         """
@@ -77,7 +98,7 @@ class UsersDatabase(object):
         :return: A list of all the usernames.
         """
         self._cursor.execute("SELECT username FROM users")
-        results = self._cursor.fetchall() # TODO: is this string?
+        results = self._cursor.fetchall()  # TODO: is this string?
         if results is not None:  # TODO: why not None? add checks and errors
             usernames = []
             for result in results:
@@ -88,15 +109,15 @@ class UsersDatabase(object):
         logging.warning("No users found")
         return []
 
-    def user_exists(self, username):
+    def username_exists(self, username):
         """
-        CHeck if a user exists
+        CHeck if a username exists
         :param username: The username of the user
         :return: True if exists False otherwise
         """
         self._cursor.execute("SELECT username FROM users\n"
                              "WHERE username = ?", (username,))
-        return self._cursor.fetchone() is None
+        return self._cursor.fetchone() is not None
 
     def close(self):
         """

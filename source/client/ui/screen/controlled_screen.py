@@ -28,7 +28,6 @@ class ControlledScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._app = App.get_running_app()
-        self._running_lock = threading.Lock()
 
     def _start_mouse_controller(self, connection_status):
         """

@@ -26,7 +26,6 @@ WindowManager:
     ControlledScreen:
 
 <LoginScreen>:
-    login_button: login_button
     username_text_input: username_text_input
     password_text_input: password_text_input
     name: "login"
@@ -55,7 +54,6 @@ WindowManager:
             text: "meme_is_good"
 
         DynamicButton:
-            id: login_button
             text: "Login"
             on_press: root.login()
 
@@ -128,15 +126,12 @@ WindowManager:
 
         DynamicLabel:
             id: partner_label
-            text: " "
+            text: app.partner
 
         DynamicButton:
             text: "Connect"
             on_press:
-                app.is_controller = root.controller_checkbox.active
-                root.connect_to_partner()
-                root.manager.transition.direction = "left"
-                app.root.current = ("controller" if app.is_controller else "controlled")
+                root.connect()
 
         DynamicButton:
             text: "Back"

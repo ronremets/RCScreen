@@ -64,4 +64,5 @@ class Connection(object):
         logging.info(f"CONNECTION:Closing connection {self.name}")
         self.connected = False
         self._set_running(False)
-        self.socket.close(kill)
+        self.socket.shutdown(block=not kill)
+        self.socket.close()

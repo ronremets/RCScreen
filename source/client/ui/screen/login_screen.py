@@ -16,7 +16,6 @@ class LoginScreen(Screen):
     """
     The screen where the client logs to the server
     """
-    login_button = ObjectProperty(None)
     username_text_input = ObjectProperty(None)
     password_text_input = ObjectProperty(None)
 
@@ -26,12 +25,12 @@ class LoginScreen(Screen):
 
     def _handle_main_connect_response(self, response):
         # TODO: handle this
-        # if response == "bad token":
-        #    pass
-        # elif response == "server crash":
-        #    pass
-        # elif response == "other":
-        #    pass
+        if response == "bad token":
+            pass
+        elif response == "server crash":
+            pass
+        elif response == "other":
+            pass
         logging.info("MAIN:Created main, switching to main menu")
         # if logged_in:
         self.manager.transition.direction = "up"
@@ -39,20 +38,25 @@ class LoginScreen(Screen):
 
     def _handle_login_response(self, response):
         # TODO: handle this
-        #if response == "wrong username or password":
-        #    pass
-        #elif response == "server crash":
-        #    pass
-        #elif response == "other":
-        #    pass
-        logging.info("MAIN:logged in, creating main")
-        self.app.connection_manager.add_connection(
-            self.app.username,
-            "main",
-            (True, True),
-            "main",
-            block=False,
-            callback=lambda main_response: Clock.schedule_once(lambda _: self._handle_main_connect_response(main_response)))
+        if response == "Username or password are wrong":
+            logging.error("Username or password are wrong")
+        elif response == "User already connected":
+            logging.error("User already connected")
+        elif response == "Connection method does not exists":
+            logging.error("Connection method does not exists")
+        elif response == "Unknown server Error":
+            logging.error("Unknown server Error")
+        elif response == "ready":
+            logging.info("MAIN:logged in, creating main")
+            self.app.connection_manager.add_connection(
+                self.app.username,
+                "main",
+                (True, True),
+                "main",
+                block=False,
+                callback=lambda main_response: Clock.schedule_once(lambda _: self._handle_main_connect_response(main_response)))
+            return
+        # close connector
 
     def login(self):
         """
@@ -70,4 +74,4 @@ class LoginScreen(Screen):
         except ValueError:
             # TODO: inconsistent checking if already connecting between
             #  normal connection and connector
-            logging.warning(f"MAIN:Already connecting!")
+            logging.error(f"MAIN:Already connecting!")

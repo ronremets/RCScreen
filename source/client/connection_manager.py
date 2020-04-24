@@ -8,9 +8,12 @@ import threading
 import queue
 
 # from communication import communication_protocol
-from communication.advanced_socket import AdvancedSocket
+from communication.advanced_socket import (AdvancedSocket,
+                                           ConnectionClosed)
 from communication.connection import Connection
-from communication.message import Message, MESSAGE_TYPES
+from communication.message import Message, MESSAGE_TYPES, ENCODING
+
+CONNECTOR_REFRESH_RATE = 1
 
 
 class ConnectionManager(object):
@@ -62,35 +65,50 @@ class ConnectionManager(object):
         :param callback: The function to call after connecting
                          (From the connecting thread)
         """
-        socket = AdvancedSocket.create_connected_socket(self._server_address)
-        self._connector.socket.start(socket, True, True)
-        logging.debug(f"CONNECTION:Sending connector method: {method}")
-        self._connector.socket.send(Message(
-            MESSAGE_TYPES["server interaction"],
-            method))
-        logging.debug(f"CONNECTIONS:Sent method")
-        logging.debug(f"CONNECTIONS:Sending user info:\n"
-                      f"{username}\n"
-                      f"{password}\n"
-                      f"connector\n"
-                      f"connector")
-        self._connector.socket.send(Message(
-            MESSAGE_TYPES["server interaction"],
-            (f"{username}\n"
-             f"{password}\n"
-             f"connector\n"
-             f"connector")))
-        logging.debug("CONNECTIONS:Sent user's info")
-        logging.debug("CONNECTIONS:Receiving connection status")
-        connection_status = self._connector.socket.recv().get_content_as_text()
-        logging.info(
-            f"CONNECTIONS:Connection status of connector: {connection_status}")
-        # A system admin can send a disconnect request. As a result,
-        # we need to make sure connector is ready to receive commands
-        # before it is considered connected but because it uses TCP
-        # the command must come after 'connected' message and so
-        # we dont need to send 'connected' from connector
-        self._connector.connected = True
+        socket = None
+        try:
+            socket = AdvancedSocket.create_connected_socket(self._server_address)
+            self._connector.socket.start(socket, True, True)
+            logging.debug(f"CONNECTION:Sending connector method: {method}")
+            self._connector.socket.send(Message(
+                MESSAGE_TYPES["server interaction"],
+                method))
+            logging.debug(f"CONNECTIONS:Sent method")
+            logging.debug(f"CONNECTIONS:Sending user info:\n"
+                          f"{username}\n"
+                          f"{password}\n"
+                          f"connector\n"
+                          f"connector")
+            self._connector.socket.send(Message(
+                MESSAGE_TYPES["server interaction"],
+                (f"{username}\n"
+                 f"{password}\n"
+                 f"connector\n"
+                 f"connector")))
+            logging.debug("CONNECTIONS:Sent user's info")
+            logging.debug("CONNECTIONS:Receiving connection status")
+            connection_status = self._connector.socket.recv().get_content_as_text()
+            logging.info(
+                f"CONNECTIONS:Connection status of connector: {connection_status}")
+            self._connector.socket.send(Message(
+                MESSAGE_TYPES["server interaction"],
+                "ready"),
+                block_until_buffer_empty=True)
+            logging.debug(
+                f"CONNECTIONS:connector sent ready")
+            # A system admin can send a disconnect request. As a result,
+            # we need to make sure connector is ready to receive commands
+            # before it is considered connected but because it uses TCP
+            # the command must come after 'connected' message and so
+            # we dont need to send 'connected' from connector
+            self._connector.connected = True
+        except ConnectionClosed as e:
+            connection_status = "Unexpected close"
+            if socket is not None:
+                if socket.running:
+                    socket.close()
+        except Exception as e:
+            connection_status = "Exception while creating socket"
         if callback is not None:
             callback(connection_status)
 
@@ -105,7 +123,8 @@ class ConnectionManager(object):
             MESSAGE_TYPES["server interaction"],
             name))
         logging.debug(f"CONNECTIONS:Receiving token for {name}")
-        response = self._connector.socket.recv().content.split(b"\n")  # TODO: is b"" same encoding? NO! fix it
+        response = self._connector.socket.recv().content.split("\n".encode(
+            ENCODING))
         logging.debug(
             f"CONNECTIONS:Received response for token for {name}: {response}")
         return {"status": response[0].decode(), "token": response[1]}
@@ -123,7 +142,8 @@ class ConnectionManager(object):
         self._add_connector(username, password, method, callback=callback)
         while self.running:
             try:
-                name = self._token_requests.get(block=False)  # TODO: timeout?
+                name = self._token_requests.get(block=True,
+                                                timeout=CONNECTOR_REFRESH_RATE)  # TODO: timeout?
             except queue.Empty:  # TODO: any better way to do this?
                 pass
             else:
@@ -367,9 +387,10 @@ class ConnectionManager(object):
             #  cant use lock cuz of deadlock. its trying to set to none and
             #  join at the same time but the joined thread is locked
             for connection in self.connections.values():
-                connection.close(kill=True)
+                connection.close()
             if self._connector_thread is not None:
                 self._connector_thread.join()
+        self._connector.close()
         # TODO: if a socket crashes, it will try to reconnect X times
         #  and then
         #  it will declare server is dead and all sockets will close.

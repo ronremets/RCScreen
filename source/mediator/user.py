@@ -14,34 +14,10 @@ class User(object):
     def __init__(self, username, password, connector):
         self._connections_lock = threading.Lock()
         self._partner_lock = threading.Lock()
-        self._tokens_lock = threading.Lock()
         self._connections = {}  # {name: connection}
-        self._tokens = {}
         self.username = username
         self.password = password
         self.partner = None
-
-    @property
-    def tokens(self):
-        """
-        The tokens of connections
-        NOTE: THIS RETURNS A REFERENCE AND NOT A COPY. ANY CHANGES TO
-        THE RETURNED dict WILL CHANGE THE ACTUAL LIST
-        :return: A reference to dict like {token: name}
-        """
-        with self._tokens_lock:
-            return self._tokens
-
-    @property
-    def connections(self):
-        """
-        The connections that were connected
-        NOTE: THIS RETURNS A REFERENCE AND NOT A COPY. ANY CHANGES TO
-        THE RETURNED dict WILL CHANGE THE ACTUAL LIST
-        :return: A reference to the dict {name: connection}
-        """
-        with self._connections_lock:
-            return self._connections
 
     @property
     def partner(self):
@@ -55,33 +31,37 @@ class User(object):
 
     def add_connection(self, connection):
         """
-        Add a connection to the dict of connections
-        :param connection: The connection to add
+        Add a connection to the dict of connections.
+        :param connection: The connection to add.
+        :raise ValueError: If the connection already exists.
         """
         with self._connections_lock:
+            if connection.name in self._connections.keys():
+                raise ValueError("Connection already exists")
             self._connections[connection.name] = connection
 
-    def add_token(self, token, name):
+    def remove_connection(self, connection):
         """
-        Add a new token.
-        :param token: The token to remove
-        :param name: The name of the connection the token belongs to
+        Remove a connection from the user.
+        :param connection: The connection to remove.
         """
-        with self._tokens_lock:
-            self._tokens[token] = name
+        with self._connections_lock:
+            self._connections.pop(connection.name)
 
-    def validate_token(self, token, name):
+    def get_connection(self, name):
         """
-        Make sure a token is correct and disable it
-        :param token: The token in bytes
-        :param name: The name of the connection of the token
-        :raise ValueError: If token does not exists or does not belong
-                           to the connection
+        Get a connection of the user.
+        :param name: The cname of the connection to get.
+        :return: The connection object.
         """
-        with self._tokens_lock:
-            print(repr(self._tokens), repr(token))
-            if token not in self._tokens:
-                raise ValueError("Token does not exists")
-            elif self._tokens[token] != name:
-                raise ValueError("Token does not belong to connection")
-            self._tokens.pop(token)
+        with self._connections_lock:
+            return self._connections[name]
+
+    def has_connection(self, name):
+        """
+        Check if the user has a connection.
+        :param name: The connection to check.
+        :return: True if exists, False otherwise.
+        """
+        with self._connections_lock:
+            return name in self._connections.keys()

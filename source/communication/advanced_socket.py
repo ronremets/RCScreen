@@ -3,7 +3,6 @@ Wrapper for socket for sending messages.
 """
 __author__ = "Ron Remets"
 
-import time
 import logging
 import queue
 from socket import timeout as socket_timeout
@@ -23,18 +22,7 @@ from communication import message_buffer
 DEFAULT_REFRESH_RATE = 1
 # The buffer size used when receiving.
 DEFAULT_BUFFER_SIZE = 1024
-# The logger of the module
-_logger = logging.getLogger(__name__)
 
-
-def timeit(func):
-    def time_the_func(*args, **kwargs):
-        b = time.time()
-        out = func(*args, **kwargs)
-        a = time.time()
-        print("The function took:", a - b)
-        return out
-    return time_the_func
 
 class ConnectionClosed(ConnectionError):
     """
@@ -121,7 +109,7 @@ class AdvancedSocket(object):
         socket = socket_object()
         try:
             socket.connect(address)
-        except Exception as e:
+        except Exception:
             socket.close()
             raise
         return socket
@@ -210,19 +198,21 @@ class AdvancedSocket(object):
                 # If it is not, try again
                 if message is None:
                     continue
-                _logger.debug("Sending message: %s", repr(message))
+                logging.debug("advanced_socket:Sending message: %s",
+                              repr(message))
                 self._send_raw_data(
                     AdvancedSocket._pack_message(message))
         except ConnectionClosed:
-            _logger.debug("Socket send thread closed normally")
+            logging.debug("advanced_socket:Socket send thread closed normally")
         except Exception as e:
+            logging.error(
+                "advanced_socket:Socket send thread crashed with error:",
+                exc_info=True)
             # Update the error state of this thread
             with self._send_error_state_lock:
                 self._send_error_state = e
-            _logger.error("Socket send thread crashed with error:",
-                          exc_info=True)
         finally:
-            _logger.info("Closed send thread of socket")
+            logging.info("advanced_socket:Closed send thread of socket")
 
     def _receive_messages(self, buffer_size):
         """
@@ -242,7 +232,8 @@ class AdvancedSocket(object):
                 # message
                 if message is None:
                     message = self._recv_message(buffer_size)
-                    _logger.debug("Received message: %s", repr(message))
+                    logging.debug("advanced_socket:Received message: %s",
+                                  repr(message))
                 # Attempt to add a message
                 try:
                     self._messages_received.add(message)
@@ -252,15 +243,16 @@ class AdvancedSocket(object):
                 else:
                     message = None
         except ConnectionClosed:
-            pass  # Close this thread.
+            logging.debug("advanced_socket:Socket recv thread closed normally")
         except Exception as e:
+            logging.error(
+                "advanced_socket:Socket recv thread crashed with error:",
+                exc_info=True)
             # Update the error state of this thread
             with self._recv_error_state_lock:
                 self._recv_error_state = e
-            _logger.error("Socket recv thread crashed with error:",
-                          exc_info=True)
         finally:
-            _logger.warning("Closed recv thread of socket")
+            logging.warning("advanced_socket:Closed recv thread of socket")
 
     def close_send_thread(self):
         """
@@ -295,14 +287,19 @@ class AdvancedSocket(object):
         with self._is_sending_lock:
             if not self._is_sending:
                 raise ConnectionClosed()
+        with self._send_error_state_lock:
+            if self._send_error_state is not None:
+                raise self._send_error_state
         self._messages_to_send.add(message)
         if block_until_buffer_empty:
             while not self._messages_to_send.empty():
                 with self._is_sending_lock:
                     if not self._is_sending:
                         raise ConnectionClosed()
+                with self._send_error_state_lock:
+                    if self._send_error_state is not None:
+                        raise self._send_error_state
 
-    @timeit
     def recv(self, block=True):
         """
         Receive a message from the other side.
@@ -315,12 +312,18 @@ class AdvancedSocket(object):
         with self._is_receiving_lock:
             if not self._is_receiving:
                 raise ConnectionClosed()
+        with self._recv_error_state_lock:
+            if self._recv_error_state is not None:
+                raise self._recv_error_state
         message_received = self._messages_received.pop()
         while block and message_received is None:
             message_received = self._messages_received.pop()
             with self._is_receiving_lock:
                 if not self._is_receiving:
                     raise ConnectionClosed()
+            with self._recv_error_state_lock:
+                if self._recv_error_state is not None:
+                    raise self._recv_error_state
         return message_received
 
     def switch_state(self, input_is_buffered, output_is_buffered):
@@ -364,19 +367,24 @@ class AdvancedSocket(object):
         self._send_thread.start()
         self._recv_thread.start()
 
-    def close(self, kill=False):
+    def shutdown(self, block=True):
         """
-        Close the threads and socket.
-        It is recommended to close the socket on another thread and set
-        kill to false (The default value).
-        :param kill: Close the socket without waiting for the threads
-                     to close properly.
+        Shutdown the socket threads.
+        Use this before close.
+        :param block: Block until threads are closed
         """
-        _logger.info("Closing socket")
+        logging.debug("advanced_socket:Shutting down sockets threads")
         self.close_send_thread()
         self.close_recv_thread()
-        if not kill:
+        if block:
             self._recv_thread.join()
             self._send_thread.join()
+
+    def close(self):
+        """
+        Close the socket.
+        Shutdown the socket before this to prevent crashing.
+        """
+        logging.debug("advanced_socket:Closing socket")
         self._socket.close()
-        _logger.info("Socket closed")
+        logging.debug("advanced_socket:Closed socket")
