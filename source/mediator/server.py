@@ -6,13 +6,13 @@ TODO: Add exception handling.
 __author__ = "Ron Remets"
 
 import logging
-import random
 import socket
 import threading
 import time
 
 from message_buffer import MessageBuffer
-from mediator.user import User
+from user import User
+from client import Client
 from communication.message import Message, MESSAGE_TYPES, ENCODING
 from communication.advanced_socket import AdvancedSocket
 from communication.connection import Connection
@@ -24,8 +24,10 @@ SERVER_ADDRESS = ("0.0.0.0", 2125)  # TODO: put it here or in main?
 # TODO: Do we need timeout? Did we implement it all the way? How much to
 #  set it
 DEFAULT_REFRESH_RATE = 2
-
-
+t = 0
+p = False
+lt = threading.Lock()
+lp = threading.Lock()
 class Server(object):
     """
     Handles all communication between clients.
@@ -34,11 +36,11 @@ class Server(object):
         self.refresh_rate = refresh_rate
         self._db_file_name = db_file_name
         self._server_socket = None
-        self._users = None
+        self._clients = None
         self._token_generator = TokenGenerator()
         self._accept_connections_thread = None
         self._running_lock = threading.Lock()
-        self._users_lock = threading.Lock()
+        self._clients_lock = threading.Lock()
         self._set_running(False)
 
     @property
@@ -53,17 +55,17 @@ class Server(object):
         with self._running_lock:
             self._running = value
 
-    def _set_partner(self, connection, user, partner_username):
+    def _set_partner(self, connection, client, partner_username):
         """
-        Set a user's partner.
+        Set a client's partner.
         :param connection: The connection to the user
-        :param user: The user
+        :param client: The client
         :param partner_username: The username of the partner
         TODO: maybe return response code? Or response string?
         """
         partner_username = partner_username
-        with self._users_lock:
-            user.partner = self._users[partner_username]
+        with self._clients_lock:
+            client.partner = self._clients[partner_username]
         connection.socket.send(Message(
             MESSAGE_TYPES["server interaction"],
             "set partner"))
@@ -86,35 +88,38 @@ class Server(object):
         Send a user all connected users.
         :param connection: The connection to the user
         """
-        with self._users_lock:
-            usernames = [*self._users.keys()]
+        with self._clients_lock:
+            usernames = [*self._clients.keys()]
         formatted_response = ", ".join(usernames)
         connection.socket.send(Message(
             MESSAGE_TYPES["server interaction"],
             formatted_response))
 
-    def _run_connector(self, connection, user, db_connection):
+    def _run_connector(self, connection, client, db_connection):
         # Only connector type sockets use login and sign up and they do
         # not need the db_connection
-        logging.info(f"CONNECTIONS:Started connector of {user.username}")
+        logging.info(f"CONNECTIONS:Started connector"
+                     f" of {client.user.username}")
         db_connection.close()
         while self.running:
             name = connection.socket.recv().get_content_as_text()
             logging.debug(
-                f"CONNECTIONS:Making token for {user.username}'s {name}")
-            token = self._token_generator.generate(user.username,
+                f"CONNECTIONS:Making token for "
+                f"{client.user.username}'s {name}")
+            token = self._token_generator.generate(client.user.username,
                                                    name)
             logging.debug(
-                f"CONNECTIONS:Made token {token} for {user.username}'s {name}")
+                f"CONNECTIONS:Made token {token} "
+                f"for {client.user.username}'s {name}")
             connection.socket.send(Message(
                 MESSAGE_TYPES["server interaction"],
                 "ok\n".encode(ENCODING) + token))
 
-    def _run_main(self, connection, user, db_connection):
+    def _run_main(self, connection, client, db_connection):
         while self.running:
             params = connection.socket.recv().get_content_as_text().split("\n")
             if params[0] == "set partner":
-                self._set_partner(connection, user, params[1])
+                self._set_partner(connection, client, params[1])
             elif params[0] == "get all usernames":
                 self._get_all_usernames(connection, db_connection)
             elif params[0] == "get all connected usernames":
@@ -149,60 +154,59 @@ class Server(object):
                 if response is not None:
                     can_send_message = True
 
-    def _run_connection_to_partner(self, connection, user, buffered=False):
+    def _run_connection_to_partner(self, connection, client):
         """
-        Run a connection that sends data to the partner of the user
+        Run a connection that sends data to the partner of the client
         and are buffered.
         :param connection: The connection that sends data.
-        :param user: The user of the connection.
-        :param buffered: Whether to buffer between receiving from one
-                         side and sending to the other. Decreases packet
-                         drops but increases latency.
+        :param client: The client of the connection.
         """
         logging.info("starting main loop of connection to partner")
-        buffer = MessageBuffer(buffered)
-        while not user.partner.has_connection(connection.name):
+        buffer = MessageBuffer(False)
+        while not client.partner.has_connection(connection.name):
             if not self.running:
                 return  # TODO: maybe go into an error state
-        partner_connection = user.partner.get_connection(connection.name)
+        partner_connection = client.partner.get_connection(connection.name)
         while not partner_connection.connected:
             if not self.running:
                 return  # TODO: maybe go into an error state
         # TODO: maybe keep a reference to this thread to join it
         #  when closing the connection
         threading.Thread(name=(f"Connection to partner {connection.name} of"
-                               f"User {user.username} to {user.partner}"),
+                               f"User {client.user.username} to "
+                               f"{client.partner.user.username}"),
                          target=self._send_messages_to_partner,
-                         args=(connection, user, buffer)).start()
+                         args=(partner_connection, buffer)).start()
+        message = None
         while self.running and connection.running:
             # TODO: what if connections turns from connected to not
             #  connected? these if's have to handle this also close
-            message = None
             if connection.connected:
                 # Try to receive a message.
                 message = connection.socket.recv(block=False)
             if message is not None:
                 # If you did receive a message, add it to the buffer.
                 buffer.add(message)
+                message = None
                 # Finally, send an ACK to get another message.
                 connection.socket.send(Message(
                     MESSAGE_TYPES["controlled"],
                     "Message received"))
 
-    def _run_buffered_connection_to_partner(self, connection, user):
+    def _run_buffered_connection_to_partner(self, connection, client):
         """
-        Run a connection that sends data to the partner of the user
+        Run a connection that sends data to the partner of the client
         and is buffered.
         :param connection: The connection that sends data.
-        :param user: The user of the connection.
+        :param client: The client of the connection.
         """
         logging.info("starting main loop of buffered connection to partner")
         # Wait for partner to create the connection.
         # TODO: partner can be None and this will crash
-        while not user.partner.has_connection(connection.name):
+        while not client.partner.has_connection(connection.name):
             if not self.running:
                 return  # TODO: maybe go into an error state
-        partner_connection = user.partner.get_connection(connection.name)
+        partner_connection = client.partner.get_connection(connection.name)
         # Wait for partner to connect the connection.
         while not partner_connection.connected:
             if not self.running:
@@ -214,37 +218,24 @@ class Server(object):
             if message is not None and partner_connection.connected:
                 partner_connection.socket.send(message)
 
-    def _add_connection_to_user(self, connection, username, token):
+    def _get_client(self, connection_name, username, token):
         """
-        Add a connection to a user, user must be connected and have a
-        connector
-        :param connection: The connection to add
-        :param username: The user's username
-        :param token: The token of the user used to connect to the user
-        :return: The user's object
-        :raise ValueError: If token does not exists or belong
-                           to connection or if the user does not exists
+        Get the client of a connection.
+        :param connection_name: the name of the connection
+        :param username: The username of the client.
+        :param token: The token of the connection
+        :return: The client object
         """
-        #with self._connections_lock:
-        #    self._connections.append(connection)
-
-        #  the user will todo: go over this
-        # be connected. If the user is not connected it must be because
-        # it crashed or disconnected and thus crashing this connection
-        # is fine.
         try:
-            with self._users_lock:
-                user = self._users[username]
+            with self._clients_lock:
+                client = self._clients[username]
         except KeyError:
             raise ValueError("User does not exists or disconnected")
+        # TODO: make sure token gets released even on crash
         self._token_generator.release_token(token,
-                                            user.username,
-                                            connection.name)
-        user.add_connection(connection)
-        logging.debug(
-            f"CONNECTIONS:Connection {connection.name} "
-            f"added to {user.username}")
-        return user
+                                            client.user.username,
+                                            connection_name)
+        return client
 
     def _validate_connector(self, username, password, database_connection):
         """
@@ -260,8 +251,8 @@ class Server(object):
                 return "username does not exists"
             elif password != database_connection.get_password(username):
                 return "password is wrong"
-            with self._users_lock:
-                if username in self._users.keys():
+            with self._clients_lock:
+                if username in self._clients.keys():
                     return "user already connected"
         except ValueError as e:
             if e.args[0] == "No such user":
@@ -276,19 +267,22 @@ class Server(object):
             connection_info,
             database_connection=None):
         """
-        Validate the user and add it to connected users
-        :param connection_socket: The socket to login
-        :param connection_info: info used to login
+        Validate the information tha client gave, and add the client to
+        the connected clients.
+        :param connection_socket: The socket to login.
+        :param connection_info: info used to login.
         :param database_connection: If available, a connection made in
-                                    the same thread
-        :return: Connection object and its user
-        :raise IndexError: If some arguments are missing from
-                           connection_info
+                                    the same thread.
+        :return: Connection object and its client.
+        :raise ValueError: On any connection error.
         """
-        username = connection_info[0]
-        password = connection_info[1]
-        connection_type = connection_info[2]
-        connection_name = connection_info[3]
+        try:
+            username = connection_info[0]
+            password = connection_info[1]
+            connection_type = connection_info[2]
+            connection_name = connection_info[3]
+        except IndexError:  # TODO: combine both tries and excepts to one
+            raise ValueError("Not enough connection info parameters")
         try:
             if database_connection is None:
                 # TODO: handle database errors in init and validate_connector
@@ -300,7 +294,10 @@ class Server(object):
             if validation_status != "user is valid":
                 raise ValueError(validation_status)
         except Exception:
-            database_connection.close()
+            # TODO: what if database_connection is not None but cannot
+            #  be closed?
+            if database_connection is not None:
+                database_connection.close()
             raise
 
         connection = Connection(
@@ -308,20 +305,33 @@ class Server(object):
             connection_socket,
             connection_type)
         connection.start()  # TODO: is this fine? check the rest of the code
+        user = User(username, password)
 
-        # Remember that the user has to be connected to pass
-        # self._validate_connector and thus is not connected yet.
-        user = User(username, password, connection)
-        with self._users_lock:
-            self._users[username] = user
-        # If the user has not yet connected, it must not have a
+        # Remember that the client has to not be connected to pass
+        # self._validate_connector and thus is not yet connected.
+        client = Client(user)
+        with self._clients_lock:
+            self._clients[username] = client
+        # If the client has not yet connected, it must not have a
         # connector. Therefore add_connection cannot crash.
-        user.add_connection(connection)
-        return connection, user, database_connection
+        client.add_connection(connection)
+        return connection, client, database_connection
 
     def _signup(self, connection_socket, connection_info):
-        username = connection_info[0]
-        password = connection_info[1]
+        """
+        Adds a user to server then connects the connection.
+        :param connection_socket: The socket of the connection.
+        :param connection_info: The information of the connection needed
+                                to add the user and connect the
+                                connection.
+        :return: The connection, its client and its database connection.
+        :raise ValueError: On any connection error.
+        """
+        try:
+            username = connection_info[0]
+            password = connection_info[1]
+        except IndexError:  # TODO: combine both tries and excepts to one
+            raise ValueError("Not enough connection info parameters")
         database_connection = UsersDatabase(self._db_file_name)
         # TODO: add something like logging in here
         database_connection.add_user(username, password)
@@ -333,31 +343,38 @@ class Server(object):
     def _connect_with_token(self,
                             connection_socket,
                             connection_info):
-        username = connection_info[0]
-        token = connection_info[1].encode("ascii") # TODO: encode everything else instead of decode this
-        connection_type = connection_info[2]
-        connection_name = connection_info[3]
+        """
+        Add a connection and connect it using a token.
+        :param connection_socket: The socket of the connection.
+        :param connection_info: info used to login (with a token)
+        :return: The connection, its client and its database connection.
+        """
+        try:
+            username = connection_info[0]
+            token = connection_info[1].encode("ascii") # TODO: encode everything else instead of decode this
+            connection_type = connection_info[2]
+            connection_name = connection_info[3]
+        except IndexError:
+            raise ValueError("Not enough connection info parameters")
         # TODO: add something like logging in here and errors and security
-        # TODO: get token
         connection = Connection(
             connection_name,
             connection_socket,
             connection_type)
-        # TODO: elsewhere in the code make sure you check that the
-        #  connection starts before you check if it is closed
         connection.start()  # TODO: is this fine? check the rest of the code
-        user = self._add_connection_to_user(
-            connection,
-            username,
-            token)
-        return connection, user
+        client = self._get_client(connection.name, username, token)
+        client.add_connection(connection)
+        logging.debug(
+            f"CONNECTIONS:Connection {connection.name} "
+            f"added to {client.user.username}")
+        return connection, client, UsersDatabase(self._db_file_name)
 
     def _connect_connection(self, connection_advanced_socket):
         """
         Connect a connection
         :param connection_advanced_socket: The advanced socket of the
                                            connection.
-        :return: Connection object and its user object and its
+        :return: Connection object and its client object and its
                  connection to the database
         """
         connection_status = "ready"
@@ -368,18 +385,17 @@ class Server(object):
         ).get_content_as_text().split("\n")
         try:
             if connecting_method == "login":
-                connection, user, db_connection = self._login(
+                connection, client, db_connection = self._login(
                     connection_advanced_socket,
                     connection_info)
             elif connecting_method == "signup":
-                connection, user, db_connection = self._signup(
+                connection, client, db_connection = self._signup(
                     connection_advanced_socket,
                     connection_info)
             elif connecting_method == "token":
-                connection, user = self._connect_with_token(
+                connection, client, db_connection = self._connect_with_token(
                     connection_advanced_socket,
                     connection_info)
-                db_connection = UsersDatabase(self._db_file_name)
             else:
                 raise ValueError("Bad method")
         except ValueError as e:
@@ -387,34 +403,31 @@ class Server(object):
             if error_string in ("username does not exists",
                                 "password is wrong"):
                 connection_status = "Username or password are wrong"
-            elif error_string == "user already connected":
-                connection_status = "User already connected"
-            elif error_string == "Bad method":
-                connection_status = "Connection method does not exists"
             else:
-                connection_status = "Unknown server Error"
+                connection_status = e.args[0]
         except Exception:
+            logging.error("Unknown error while connecting", exc_info=True)
             raise ValueError("Could not connect")
         connection_advanced_socket.send(Message(
             MESSAGE_TYPES["server interaction"],
             connection_status))
         # Make sure buffers are empty before switching
-        response = connection_advanced_socket.recv(block=True)
-        if connection_status != "ready":
+        response = connection_advanced_socket.recv(block=True).get_content_as_text()
+        if response != "ready":
             logging.debug(
                 f"CONNECTIONS:Crashed with "
-                f"connection status: {response.get_content_as_text()}")
+                f"connection status: {response}")
             raise ValueError("could not connect")
         logging.debug(
             f"CONNECTIONS:{connection.name} "
-            f"connection status: {response.get_content_as_text()}")
-        return connection, user, db_connection
+            f"connection status: {response}")
+        return connection, client, db_connection
 
-    def _run_main_loop_of_connection(self, connection, user, db_connection):
+    def _run_main_loop_of_connection(self, connection, client, db_connection):
         """
         Based on the connection type, run its main loop.
         :param connection: The connection object.
-        :param user: The user of the connection.
+        :param client: The client of the connection.
         :param db_connection: The connection to the database of the
                               connection.
         """
@@ -423,10 +436,10 @@ class Server(object):
             f"for connection {connection.name}")
         if connection.type == "connector":
             connection.connected = True
-            self._run_connector(connection, user, db_connection)
+            self._run_connector(connection, client, db_connection)
         elif connection.type == "main":
             connection.connected = True
-            self._run_main(connection, user, db_connection)
+            self._run_main(connection, client, db_connection)
         elif connection.type in ("keyboard - sender", "mouse - sender"):
             logging.info("connecting buffered sender socket")
             connection.socket.switch_state(True, True)
@@ -438,7 +451,7 @@ class Server(object):
                 f"closing send thread of connection {connection.name}")
             connection.socket.close_send_thread()
             connection.connected = True
-            self._run_buffered_connection_to_partner(connection, user)
+            self._run_buffered_connection_to_partner(connection, client)
         elif connection.type in ("keyboard - receiver", "mouse - receiver"):
             logging.info("connecting buffered receiver socket")
             connection.socket.switch_state(True, True)
@@ -454,7 +467,7 @@ class Server(object):
             logging.info("connecting unbuffered sender socket")
             connection.socket.switch_state(False, True)
             connection.connected = True
-            self._run_connection_to_partner(connection, user)
+            self._run_connection_to_partner(connection, client)
         elif connection.type == "frame - receiver":
             logging.info("connecting unbuffered receiver socket")
             connection.socket.switch_state(True, False)
@@ -471,7 +484,7 @@ class Server(object):
         connection_advanced_socket = AdvancedSocket()
         connection_advanced_socket.start(connection_socket, True, True)
         try:
-            connection, user, db_connection = self._connect_connection(
+            connection, client, db_connection = self._connect_connection(
                 connection_advanced_socket)
         except ValueError as e:
             if e.args[0] == "could not connect":
@@ -487,7 +500,7 @@ class Server(object):
             connection_advanced_socket.close()
         else:
             # TODO: try except here
-            self._run_main_loop_of_connection(connection, user, db_connection)
+            self._run_main_loop_of_connection(connection, client, db_connection)
 
     def _accept_connections(self):
         """
@@ -523,7 +536,7 @@ class Server(object):
         """
         Start the server.
         """
-        self._users = {}
+        self._clients = {}
         self._server_socket = socket.socket()
         self._server_socket.settimeout(DEFAULT_REFRESH_RATE)
         self._server_socket.bind(SERVER_ADDRESS)

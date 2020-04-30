@@ -8,6 +8,7 @@ import queue
 from socket import timeout as socket_timeout
 from socket import socket as socket_object
 import threading
+import time
 
 import lz4.frame
 
@@ -21,7 +22,9 @@ from communication import message_buffer
 # they check if they have to close.
 DEFAULT_REFRESH_RATE = 1
 # The buffer size used when receiving.
-DEFAULT_BUFFER_SIZE = 1024
+DEFAULT_LENGTH_BUFFER_SIZE = 2**4
+DEFAULT_TYPE_BUFFER_SIZE = 2**2
+DEFAULT_CONTENT_BUFFER_SIZE = 2**16
 
 
 class ConnectionClosed(ConnectionError):
@@ -173,10 +176,10 @@ class AdvancedSocket(object):
         """
         length = int(self._recv_fixed_length_data(
             MESSAGE_LENGTH_LENGTH,
-            buffer_size).decode(ENCODING))
+            DEFAULT_LENGTH_BUFFER_SIZE).decode(ENCODING))
         message_type = self._recv_fixed_length_data(
             MESSAGE_TYPE_LENGTH,
-            buffer_size).decode(ENCODING)
+            DEFAULT_TYPE_BUFFER_SIZE).decode(ENCODING)
         content = lz4.frame.decompress(self._recv_fixed_length_data(
             length,
             buffer_size))
@@ -195,6 +198,7 @@ class AdvancedSocket(object):
                         raise ConnectionClosed()
                 # Check if a message is available
                 message = self._messages_to_send.pop()
+                time.sleep(0)
                 # If it is not, try again
                 if message is None:
                     continue
@@ -340,7 +344,7 @@ class AdvancedSocket(object):
               input_is_buffered,
               output_is_buffered,
               refresh_rate=DEFAULT_REFRESH_RATE,
-              buffer_size=DEFAULT_BUFFER_SIZE):
+              buffer_size=DEFAULT_CONTENT_BUFFER_SIZE):
         """
         Start sending and receiving messages.
         :param socket: The socket to use to send.
@@ -377,8 +381,18 @@ class AdvancedSocket(object):
         self.close_send_thread()
         self.close_recv_thread()
         if block:
-            self._recv_thread.join()
-            self._send_thread.join()
+            try:
+                self._recv_thread.join()
+            except AttributeError:
+                pass  # Thread not created
+            except RuntimeError:
+                pass  # Thread not started or closed
+            try:
+                self._send_thread.join()
+            except AttributeError:
+                pass  # Thread not created
+            except RuntimeError:
+                pass  # Thread not started or closed
 
     def close(self):
         """
@@ -386,5 +400,9 @@ class AdvancedSocket(object):
         Shutdown the socket before this to prevent crashing.
         """
         logging.debug("advanced_socket:Closing socket")
-        self._socket.close()
+        try:
+            self._socket.close()
+        except AttributeError:
+            pass  # Socket not started
+        self._socket = None
         logging.debug("advanced_socket:Closed socket")

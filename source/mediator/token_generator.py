@@ -57,12 +57,16 @@ class TokenGenerator(object):
         :raise KeyError: If token does not exists.
         :raise ValueError: If username or connection name is wrong.
         """
-        with self._tokens_lock:
-            real_username, real_connection_name = self._tokens[token]
-            print(username, connection_name, self._tokens[token])
-            if (username == real_username
-                    and connection_name == real_connection_name):
-                self._tokens.pop(token)
-            else:
-                raise ValueError(
-                    "token's username or connection name is wrong")
+        try:
+            with self._tokens_lock:
+                real_username, real_connection_name = self._tokens[token]
+                if (username == real_username
+                        and connection_name == real_connection_name):
+                    # This cannot crash since otherwise
+                    # self._tokens[token] would have crashed.
+                    self._tokens.pop(token)
+                else:
+                    raise ValueError(
+                        "Token's username or connection name is wrong")
+        except KeyError:
+            raise ValueError("Token does not exists")

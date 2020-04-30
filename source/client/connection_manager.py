@@ -6,6 +6,7 @@ __author__ = "Ron Remets"
 import logging
 import threading
 import queue
+import time
 
 # from communication import communication_protocol
 from communication.advanced_socket import (AdvancedSocket,
@@ -140,16 +141,20 @@ class ConnectionManager(object):
                          (From the connecting thread)
         """
         self._add_connector(username, password, method, callback=callback)
-        while self.running:
-            try:
-                name = self._token_requests.get(block=True,
-                                                timeout=CONNECTOR_REFRESH_RATE)  # TODO: timeout?
-            except queue.Empty:  # TODO: any better way to do this?
-                pass
-            else:
-                token = self._get_token(name)  # TODO: what if this crashes?
-                with self._tokens_lock:
-                    self._tokens[name] = token
+        try:
+            while self.running:
+                try:
+                    name = self._token_requests.get(block=True,
+                                                    timeout=CONNECTOR_REFRESH_RATE)
+                except queue.Empty:  # TODO: any better way to do this?
+                    pass
+                else:
+                    token = self._get_token(name)  # TODO: what if this crashes?
+                    with self._tokens_lock:
+                        self._tokens[name] = token
+        except ConnectionError:  # TODO: handle socket errors here
+            logging.error("CONNECTIONS:connector crashed", exc_info=True)
+            self._connector.close()  # TODO: stop connector
 
     def add_connector(self, username, password, method, callback=None):
         """
@@ -388,8 +393,12 @@ class ConnectionManager(object):
             #  join at the same time but the joined thread is locked
             for connection in self.connections.values():
                 connection.close()
-            if self._connector_thread is not None:
+            try:
                 self._connector_thread.join()
+            except AttributeError:
+                pass  # Thread not created
+            except RuntimeError:
+                pass  # Thread not started or closed
         self._connector.close()
         # TODO: if a socket crashes, it will try to reconnect X times
         #  and then

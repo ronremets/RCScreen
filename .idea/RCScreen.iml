@@ -8,10 +8,10 @@
       <sourceFolder url="file://$MODULE_DIR$/source/client/ui/popup" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/source/client/ui" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/source/client" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/source" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/source/client/components" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/source/states" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/source/token_generator" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/source" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/General_Information" />
       <excludeFolder url="file://$MODULE_DIR$/bin" />
     </content>
