@@ -102,7 +102,11 @@ class Server(object):
                      f" of {client.user.username}")
         db_connection.close()
         while self.running:
-            name = connection.socket.recv().get_content_as_text()
+            time.sleep(0)  # Release IO
+            message = connection.socket.recv(block=False)
+            if message is None:
+                continue
+            name = message.get_content_as_text()
             logging.debug(
                 f"CONNECTIONS:Making token for "
                 f"{client.user.username}'s {name}")
@@ -117,7 +121,11 @@ class Server(object):
 
     def _run_main(self, connection, client, db_connection):
         while self.running:
-            params = connection.socket.recv().get_content_as_text().split("\n")
+            time.sleep(0)  # Release IO
+            message = connection.socket.recv(block=False)
+            if message is None:
+                continue
+            params = message.get_content_as_text().split("\n")
             if params[0] == "set partner":
                 self._set_partner(connection, client, params[1])
             elif params[0] == "get all usernames":
@@ -142,6 +150,7 @@ class Server(object):
         """
         can_send_message = True
         while self.running and partner_connection.running:
+            time.sleep(0)  # Release IO
             message = buffer.pop()
             if (message is not None
                     and can_send_message
@@ -164,10 +173,12 @@ class Server(object):
         logging.info("starting main loop of connection to partner")
         buffer = MessageBuffer(False)
         while not client.partner.has_connection(connection.name):
+            time.sleep(0)  # Release IO
             if not self.running:
                 return  # TODO: maybe go into an error state
         partner_connection = client.partner.get_connection(connection.name)
         while not partner_connection.connected:
+            time.sleep(0)  # Release IO
             if not self.running:
                 return  # TODO: maybe go into an error state
         # TODO: maybe keep a reference to this thread to join it
@@ -179,6 +190,7 @@ class Server(object):
                          args=(partner_connection, buffer)).start()
         message = None
         while self.running and connection.running:
+            time.sleep(0)  # Release IO
             # TODO: what if connections turns from connected to not
             #  connected? these if's have to handle this also close
             if connection.connected:
@@ -204,14 +216,17 @@ class Server(object):
         # Wait for partner to create the connection.
         # TODO: partner can be None and this will crash
         while not client.partner.has_connection(connection.name):
+            time.sleep(0)  # Release IO
             if not self.running:
                 return  # TODO: maybe go into an error state
         partner_connection = client.partner.get_connection(connection.name)
         # Wait for partner to connect the connection.
         while not partner_connection.connected:
+            time.sleep(0)  # Release IO
             if not self.running:
                 return  # TODO: maybe go into an error state
         while self.running and connection.running:
+            time.sleep(0)  # Release IO
             message = None
             if connection.connected:
                 message = connection.socket.recv(block=False)
@@ -440,6 +455,11 @@ class Server(object):
         elif connection.type == "main":
             connection.connected = True
             self._run_main(connection, client, db_connection)
+        elif connection.type == "settings":
+            logging.info("connecting two ways buffered sender socket")
+            connection.socket.switch_state(True, True)
+            connection.connected = True
+            self._run_buffered_connection_to_partner(connection, client)
         elif connection.type in ("keyboard - sender", "mouse - sender"):
             logging.info("connecting buffered sender socket")
             connection.socket.switch_state(True, True)

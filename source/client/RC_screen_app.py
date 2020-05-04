@@ -9,7 +9,8 @@ from kivy.app import App
 from kivy.properties import (BooleanProperty,
                              NumericProperty,
                              ObjectProperty,
-                             StringProperty)
+                             StringProperty,
+                             ListProperty)
 
 from connection_manager import ConnectionManager
 
@@ -31,6 +32,9 @@ class RCScreenApp(App):
     connection_manager = ObjectProperty(ConnectionManager())
     x_sensitivity = NumericProperty(10, min=0)
     y_sensitivity = NumericProperty(10, min=0)
+    screen_size = ListProperty()
+    other_screen_width = NumericProperty(0)
+    other_screen_height = NumericProperty(0)
 
     def on_start(self):
         """

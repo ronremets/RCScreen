@@ -15,26 +15,63 @@ from kivy.properties import ObjectProperty
 from kivy.clock import Clock
 
 from communication.advanced_socket import ConnectionClosed
+from communication.message import Message, MESSAGE_TYPES
+from components.session_settings import SessionSettings
+from ui.mouse import Mouse
 
 
 class ControllerScreen(Screen):
     """
     The screen where the client controls another client.
     """
-    controller = ObjectProperty()
+    #controller = ObjectProperty()
+    mouse = ObjectProperty(Mouse())
     screen = ObjectProperty()
+    keyboard_tracker = ObjectProperty()
+    session_settings = ObjectProperty(SessionSettings())
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._app = App.get_running_app()
 
+    def _update_screen_size_variable(self, *_):
+        self._app.screen_size = self.screen.norm_image_size
+        print("screen var updated to", self._app.screen_size)
+
+    def _update_screen_size(self, *_):
+        print(self.screen.size, self.screen.norm_image_size)
+        width, height = self._app.screen_size
+        print("var is", self._app.screen_size)
+        if self.session_settings.running:
+            self.session_settings.settings_updates.put(Message(
+                MESSAGE_TYPES["controller"],
+                f"other screen size:{width}, {height}"))
+
+    def on_touch_down(self, touch):
+        self.keyboard_tracker.show_keyboard()
+        return super().on_touch_down(touch)
+
+    def _start_keyboard(self):
+        self.keyboard_tracker.connection = self._app.connection_manager.connections[
+            "keyboard tracker"]
+        self.keyboard_tracker.is_tracking = True
+
+    def _handle_keyboard_connection_status(self, connection_status):
+        logging.debug(
+            f"MAIN:Keyboard connection status: {connection_status}")
+        # TODO: Handle errors
+        Clock.schedule_once(lambda _: self._start_keyboard())
+
     def _start_mouse(self):
         """
         Start the thread that sends the mouse information.
         """
-        self.controller.connection = self._app.connection_manager.connections[
+        #self.controller.connection = self._app.connection_manager.connections[
+        #    "mouse tracker"]
+        #self.controller.is_active = True
+        self.mouse.connection = self._app.connection_manager.connections[
             "mouse tracker"]
-        self.controller.is_active = True
+        self.mouse.is_tracking = True
 
     def _handle_mouse_connection_status(self, connection_status):
         """
@@ -55,6 +92,17 @@ class ControllerScreen(Screen):
             "screen recorder"]
         self.screen.start()
 
+    def _handle_settings_connection_status(self, connection_status):
+        logging.debug(
+            f"MAIN:Settings connection status: {connection_status}")
+        # TODO: Handle errors
+        Clock.schedule_once(lambda _: self._start_settings())
+
+    def _start_settings(self):
+        self.session_settings.start(
+            self._app.connection_manager.connections["settings"])
+        self._update_screen_size_variable()
+
     def _handle_screen_connection_status(self, connection_status):
         """
         Handle the connection status of the screen connection.
@@ -68,8 +116,12 @@ class ControllerScreen(Screen):
 
     def on_enter(self, *args):
         """
-        When this screen starts, start showing the screen.
+        Start the screen
         """
+        # TODO: what if texture changes? screen size does not update!
+        self.screen.bind(size=self._update_screen_size_variable)
+        self._app.bind(screen_size=self._update_screen_size)
+
         logging.info("MAIN:Creating mouse tracker connection")
         self._app.connection_manager.add_connection(
             self._app.username,
@@ -87,6 +139,20 @@ class ControllerScreen(Screen):
             "frame - receiver",
             block=False,
             callback=self._handle_screen_connection_status)
+        self._app.connection_manager.add_connection(
+            self._app.username,
+            "keyboard tracker",
+            (True, True),
+            "keyboard - sender",
+            block=False,
+            callback=self._handle_keyboard_connection_status)
+        self._app.connection_manager.add_connection(
+            self._app.username,
+            "settings",
+            (True, True),
+            "settings",
+            block=False,
+            callback=self._handle_settings_connection_status)
 
     def on_leave(self, *args):
         """

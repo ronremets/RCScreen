@@ -287,81 +287,82 @@ WindowManager:
                 self.text = "pressed"
 
 
-<Controller>:
-    DynamicButton:
-        text: "Left click"
-        size_hint: 0.25, 1 / 3
-        pos:
-            (self.width,
-            0.5 * root.height - self.height / 2)
-        on_press: root.left_button_clicked()
+#<Controller>:
+#    DynamicButton:
+#        text: "Left click"
+#        size_hint: 0.25, 1 / 3
+#        pos:
+#            (self.width,
+#            0.5 * root.height - self.height / 2)
+#        on_press: root.left_button_clicked()
+#
+#    DynamicButton:
+#        text: "Right click"
+#        size_hint: 0.25, 1 / 3
+#        pos:
+#            (2 * self.width,
+#            0.5 * root.height - self.height / 2)
+#        on_press: root.right_button_clicked()
+#
+#    DynamicButton:
+#        text: "<"
+#        size_hint: 0.25, 1 / 3
+#        pos: (0, 0.5 * root.height - self.height / 2)
+#        on_press: root.move_left()
+#
+#    DynamicButton:
+#        text: ">"
+#        size_hint: 0.25, 1 / 3
+#        pos:
+#            (root.width - self.width,
+#            0.5 * root.height - self.height / 2)
+#        on_press: root.move_right()
+#
+#    DynamicButton:
+#        text: "^"
+#        size_hint: 0.25, 1 / 3
+#        pos:
+#            (0.5 * root.width - self.width / 2,
+#            root.height - self.height)
+#        on_press: root.move_up()
+#
+#    DynamicButton:
+#        text: "v"
+#        size_hint: 0.25, 1 / 3
+#        pos: (0.5 * root.width - self.width / 2, 0)
+#        on_press: root.move_down()
 
-    DynamicButton:
-        text: "Right click"
-        size_hint: 0.25, 1 / 3
-        pos:
-            (2 * self.width,
-            0.5 * root.height - self.height / 2)
-        on_press: root.right_button_clicked()
 
-    DynamicButton:
-        text: "<"
-        size_hint: 0.25, 1 / 3
-        pos: (0, 0.5 * root.height - self.height / 2)
-        on_press: root.move_left()
-
-    DynamicButton:
-        text: ">"
-        size_hint: 0.25, 1 / 3
-        pos:
-            (root.width - self.width,
-            0.5 * root.height - self.height / 2)
-        on_press: root.move_right()
-
-    DynamicButton:
-        text: "^"
-        size_hint: 0.25, 1 / 3
-        pos:
-            (0.5 * root.width - self.width / 2,
-            root.height - self.height)
-        on_press: root.move_up()
-
-    DynamicButton:
-        text: "v"
-        size_hint: 0.25, 1 / 3
-        pos: (0.5 * root.width - self.width / 2, 0)
-        on_press: root.move_down()
-
-
-<StreamedController>:
-    x_sensitivity: app.x_sensitivity
-    y_sensitivity: app.y_sensitivity
+#<StreamedController>:
+#    x_sensitivity: app.x_sensitivity
+#    y_sensitivity: app.y_sensitivity
 
 
 <ControllerScreen>
+    mouse: mouse
     screen: screen
     keyboard_tracker: keyboard_tracker
-    controller: controller
+    #controller: controller
     name: "controller"
 
     KeyboardTracker:
         id: keyboard_tracker
 
-    DynamicButton:
-        background_color: 1, 1, 1, 0.5
-        size_hint: 0.1, 0.1
-        pos: 0, 0
-        text: "Keyboard"
-        on_press:
-            root.keyboard_tracker.show_keyboard()
-
     StreamedImage:
         id: screen
+        on_width: app.screen_width = self.width
+        on_height: app.screen_height = self.height
         source: ""
         pos: (0, 0)
         size: root.size
         nocache: True
         allow_stretch: True
+        keep_ratio: True
+
+    Mouse:
+        id: mouse
+        pos: 0, 0
+        size_hint: 0.01, 0.01
 
     DynamicButton:
         background_color: 1, 1, 1, 0.5
@@ -372,10 +373,11 @@ WindowManager:
             root.manager.transition.direction = "right"
             app.root.current = "connect"
 
-    StreamedController:
-        id: controller
-        size_hint: 0.5, 0.5
-        pos: root.width - self.width, 0
+
+    #StreamedController:
+    #    id: controller
+    #    size_hint: 0.5, 0.5
+    #    pos: root.width - self.width, 0
 
 
 <ControlledScreen>
@@ -390,3 +392,22 @@ WindowManager:
         on_press:
             root.manager.transition.direction = "right"
             app.root.current = "connect"
+
+<Mouse>:
+    GridLayout:
+        rows: 1
+        cols: 2
+        pos_hint: 0.6, 0.8
+        size_hint: 0.2, 0.2
+        Spinner:
+            size_hint: None, None
+            text: 'left'
+            values: 'left', 'right'
+            on_text:
+                root.button_type = self.text
+        Spinner:
+            size_hint: None, None
+            text: 'move'
+            values: 'move', 'click'
+            on_text:
+                root.click_type = self.text

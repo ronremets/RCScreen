@@ -5,6 +5,7 @@ __author__ = "Ron Remets"
 
 import logging
 import threading
+import time
 
 
 class Component(object):
@@ -13,6 +14,7 @@ class Component(object):
     """
     def __init__(self):
         # TODO: is name needed?
+        # TODO: name belongs to class an not the object
         self._name = "Component"  # The name of the component
         self._main_thread = None
         self._running_lock = threading.Lock()
@@ -38,6 +40,7 @@ class Component(object):
         """
         self._setup()
         while self.running:
+            time.sleep(0)
             self._update()
 
     def _update(self):

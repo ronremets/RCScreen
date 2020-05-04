@@ -62,6 +62,7 @@ class StreamedImage(Image):
         """
         # TODO: https://buildmedia.readthedocs.org/media/pdf/kivy/latest/kivy.pdf
         #  page 360
+        # TODO: StreamedImage should not know about this variable
         if self._running:
             return
         logging.debug("FRAME:Starting screen update event")
