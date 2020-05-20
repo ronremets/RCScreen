@@ -3,8 +3,23 @@ A class to organize a connection
 """
 __author__ = "Ron Remets"
 
+import enum
 import logging
 import threading
+
+
+class ConnectionStatus(enum.Enum):
+    """
+    The possible statuses of a connection
+    """
+    NOT_STARTED = enum.auto()
+    CONNECTING = enum.auto()
+    CONNECTED = enum.auto()
+    DISCONNECTING = enum.auto()
+    DISCONNECTED = enum.auto()
+    CLOSING = enum.auto()
+    CLOSED = enum.auto()
+    ERROR = enum.auto()
 
 
 class Connection(object):
@@ -17,6 +32,8 @@ class Connection(object):
         self.type = connection_type
         self._running_lock = threading.Lock()
         self._connected_lock = threading.Lock()
+        self._status_lock = threading.Lock()
+        self.status = ConnectionStatus.NOT_STARTED
         self.connected = False
         self._set_running(False)
 
@@ -49,20 +66,38 @@ class Connection(object):
         with self._connected_lock:
             self._connected = value
 
+    @property
+    def status(self):
+        """
+        What the connection is currently doing
+        :return: A ConnectionStatus enum value
+        """
+        with self._status_lock:
+            return self._status
+
+    @status.setter
+    def status(self, value):
+        with self._status_lock:
+            self._status = value
+
     def start(self):
         """
         Start the connection by setting running to True
         """
         logging.info(f"CONNECTIONS:Starting connection {self.name}")
         self._set_running(True)
+        #self.status = ConnectionStatus.CONNECTING
 
-    def close(self, kill=False):
+    def disconnect(self):
         """
-        Close the connection by closing the socket
-        :param kill: kill the socket (see AdvanceSocket)
+        close the threads that might crash if the other side closes.
         """
-        logging.info(f"CONNECTION:Closing connection {self.name}")
-        self.connected = False
-        self._set_running(False)
-        self.socket.shutdown(block=not kill)
+        self.socket.shutdown()
+        self.status = ConnectionStatus.DISCONNECTED
+
+    def close(self):
+        """
+        Close the connection.
+        """
         self.socket.close()
+        self.status = ConnectionStatus.CLOSED

@@ -16,14 +16,6 @@ from kivy.clock import Clock
 from communication.message import Message, MESSAGE_TYPES
 
 
-def timeit(func):
-    def _check_if_connected_to_partner(*args, **kwargs):
-        b = time.time()
-        out = func(*args, **kwargs)
-        a = time.time()
-        print("The function took:", a - b)
-        return out
-    return _check_if_connected_to_partner
 class ConnectScreen(Screen):
     """
     The screen where the client connects to another client
@@ -61,8 +53,12 @@ class ConnectScreen(Screen):
         :param connection_status: The connection status of the get users
                                   connection
         """
-        self.user_selector.start(
-            self._app.connection_manager.connections["get users"])
+        if connection_status == "ready":
+            self.user_selector.start(
+                self._app.connection_manager.client.get_connection("get users"))
+        else:
+            # state error
+            pass
 
     def on_enter(self):
         """
@@ -84,9 +80,8 @@ class ConnectScreen(Screen):
         """
         logging.debug("starting to leave")
         self.user_selector.close()
-        logging.warning("Trying to crash socket")
         try:
-            self._app.connection_manager.close_connection("get users", False)
+            self._app.connection_manager.close_connection("get users")
         except Exception as e:
             logging.error("socket error while closing: " + str(e))
         logging.debug("closed connection to get users")

@@ -51,27 +51,21 @@ class MessageBuffer(object):
             else:
                 self._messages = None
 
-    def add(self, message, timeout=None):
+    def add(self, message):
         """
         Add messages to buffer.
         :param message: The message to add.
-        :param timeout: If not None and buffer is buffered, the time
-                        while adding. If timeout occurs, raise
-                        queue.Full
         :raise queue.Full: If timeout occurs and buffered
         """
         with self._messages_lock:
             if self._buffered:
-                self._messages.put(
-                    message,
-                    block=not (timeout is not None and timeout == 0),
-                    timeout=timeout)
+                self._messages.put(message, block=False)
             else:
                 self._messages = message
 
     # TODO: timeout does not work, blocking until an items is put in the
     #  buffer does not works since both pop and add are locked
-    def pop(self, timeout=0):
+    def pop(self):
         """
         Get a message from the buffer.
         :param timeout: If None, block until a message is available.
@@ -84,9 +78,7 @@ class MessageBuffer(object):
         with self._messages_lock:
             if self._buffered:
                 try:
-                    return self._messages.get(
-                        block=not (timeout is not None and timeout == 0),
-                        timeout=timeout)
+                    return self._messages.get(block=False)
                 except queue.Empty:
                     return None
             else:

@@ -12,7 +12,7 @@ import logging
 from kivy.app import App
 from kivy.uix.screenmanager import Screen
 from kivy.properties import ObjectProperty
-from kivy.clock import Clock
+from kivy.clock import Clock, mainthread
 
 from communication.advanced_socket import ConnectionClosed
 from communication.message import Message, MESSAGE_TYPES
@@ -24,7 +24,6 @@ class ControllerScreen(Screen):
     """
     The screen where the client controls another client.
     """
-    #controller = ObjectProperty()
     mouse = ObjectProperty(Mouse())
     screen = ObjectProperty()
     keyboard_tracker = ObjectProperty()
@@ -51,17 +50,19 @@ class ControllerScreen(Screen):
         self.keyboard_tracker.show_keyboard()
         return super().on_touch_down(touch)
 
+    @mainthread
     def _start_keyboard(self):
-        self.keyboard_tracker.connection = self._app.connection_manager.connections[
-            "keyboard tracker"]
+        self.keyboard_tracker.connection = self._app.connection_manager.client.get_connection(
+            "keyboard tracker")
         self.keyboard_tracker.is_tracking = True
 
     def _handle_keyboard_connection_status(self, connection_status):
         logging.debug(
             f"MAIN:Keyboard connection status: {connection_status}")
         # TODO: Handle errors
-        Clock.schedule_once(lambda _: self._start_keyboard())
+        self._start_keyboard()
 
+    @mainthread
     def _start_mouse(self):
         """
         Start the thread that sends the mouse information.
@@ -69,8 +70,8 @@ class ControllerScreen(Screen):
         #self.controller.connection = self._app.connection_manager.connections[
         #    "mouse tracker"]
         #self.controller.is_active = True
-        self.mouse.connection = self._app.connection_manager.connections[
-            "mouse tracker"]
+        self.mouse.connection = self._app.connection_manager.client.get_connection(
+            "mouse tracker")
         self.mouse.is_tracking = True
 
     def _handle_mouse_connection_status(self, connection_status):
@@ -82,26 +83,28 @@ class ControllerScreen(Screen):
         logging.debug(
             f"MAIN:Mouse connection status: {connection_status}")
         # TODO: Handle errors
-        Clock.schedule_once(lambda _: self._start_mouse())
+        self._start_mouse()
 
-    def _start_screen(self):
-        """
-        Start the screen streaming.
-        """
-        self.screen.connection = self._app.connection_manager.connections[
-            "screen recorder"]
-        self.screen.start()
+    @mainthread
+    def _start_settings(self):
+        self.session_settings.start(
+            self._app.connection_manager.client.get_connection("settings"))
+        self._update_screen_size_variable()
 
     def _handle_settings_connection_status(self, connection_status):
         logging.debug(
             f"MAIN:Settings connection status: {connection_status}")
         # TODO: Handle errors
-        Clock.schedule_once(lambda _: self._start_settings())
+        self._start_settings()
 
-    def _start_settings(self):
-        self.session_settings.start(
-            self._app.connection_manager.connections["settings"])
-        self._update_screen_size_variable()
+    @mainthread
+    def _start_screen(self):
+        """
+        Start the screen streaming.
+        """
+        self.screen.connection = self._app.connection_manager.client.get_connection(
+            "screen recorder")
+        self.screen.start()
 
     def _handle_screen_connection_status(self, connection_status):
         """
@@ -112,13 +115,14 @@ class ControllerScreen(Screen):
         logging.debug(
             f"MAIN:Screen connection status: {connection_status}")
         # TODO: Handle errors
-        Clock.schedule_once(lambda _: self._start_screen())
+        self._start_screen()
 
     def on_enter(self, *args):
         """
         Start the screen
         """
         # TODO: what if texture changes? screen size does not update!
+        #  for example, if the size of the raw image of the screen changes
         self.screen.bind(size=self._update_screen_size_variable)
         self._app.bind(screen_size=self._update_screen_size)
 
@@ -159,11 +163,18 @@ class ControllerScreen(Screen):
         Close all components.
         """
         # TODO: will crash if not finished before connection closes
-        self.controller.is_alive = False
-        self.screen.close()
-        try:
-            # TODO: change kill to False
-            self._app.connection_manager.close_connection("screen recorder", False)
-            self._app.connection_manager.close_connection("mouse tracker", False)
-        except Exception as e:
-            logging.error(f"socket error while closing screen recorder: {e}")
+        #self.controller.is_alive = False
+        self.mouse.is_tracking = False
+        self.screen.stop()
+        self.keyboard_tracker.is_tracking = False
+        self.session_settings.close()
+        for connection_name in ("screen recorder",
+                                "mouse tracker",
+                                "keyboard tracker",
+                                "settings"):
+            try:
+                # TODO: change kill to False
+                self._app.connection_manager.close_connection(connection_name)
+            except Exception:
+                logging.error(f"CONTROLLED SCREEN:Error while closing"
+                              f" {connection_name}", exc_info=True)

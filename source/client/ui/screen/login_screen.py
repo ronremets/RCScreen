@@ -7,9 +7,13 @@ __author__ = "Ron Remets"
 import logging
 
 from kivy.app import App
-from kivy.clock import Clock
+from kivy.clock import Clock, mainthread
 from kivy.uix.screenmanager import Screen
 from kivy.properties import ObjectProperty
+from kivy.uix.popup import Popup
+from kivy.uix.label import Label
+from kivy.uix.button import Button
+from kivy.uix.relativelayout import RelativeLayout
 
 
 class LoginScreen(Screen):
@@ -23,6 +27,7 @@ class LoginScreen(Screen):
         super().__init__(**kwargs)
         self.app = App.get_running_app()
 
+    @mainthread
     def _handle_main_connect_response(self, response):
         # TODO: handle this
         if response == "bad token":
@@ -36,17 +41,10 @@ class LoginScreen(Screen):
         self.manager.transition.direction = "up"
         self.app.root.current = "main"
 
+    @mainthread
     def _handle_login_response(self, response):
         # TODO: handle this
-        if response == "Username or password are wrong":
-            logging.error("Username or password are wrong")
-        elif response == "User already connected":
-            logging.error("User already connected")
-        elif response == "Connection method does not exists":
-            logging.error("Connection method does not exists")
-        elif response == "Unknown server Error":
-            logging.error("Unknown server Error")
-        elif response == "ready":
+        if response == "ready":
             logging.info("MAIN:logged in, creating main")
             self.app.connection_manager.add_connection(
                 self.app.username,
@@ -54,8 +52,20 @@ class LoginScreen(Screen):
                 (True, True),
                 "main",
                 block=False,
-                callback=lambda main_response: Clock.schedule_once(lambda _: self._handle_main_connect_response(main_response)))
-            return
+                callback=lambda main_response: self._handle_main_connect_response(main_response))
+        else:
+            content = RelativeLayout(size_hint=(1, 1))
+            content.add_widget(Label(text=response,
+                                     pos_hint={"bottom": 0.8, "left": 1},
+                                     size_hint=(1, 0.8)))
+            dismiss_button = Button(text=response,
+                                    pos_hint={"bottom": 1, "left": 0.5},
+                                    size_hind=(0.8, 0.2))
+            content.add_widget(dismiss_button)
+            popup = Popup(title=response, content=content)
+            dismiss_button.bind(on_press=popup.dismiss)
+            popup.open()
+
         # close connector
 
     def login(self):
@@ -70,8 +80,10 @@ class LoginScreen(Screen):
                 self.app.username,
                 self.app.password,
                 "login",
-                callback=lambda response: Clock.schedule_once(lambda _: self._handle_login_response(response)))
+                callback=lambda response: self._handle_login_response(response))
         except ValueError:
             # TODO: inconsistent checking if already connecting between
             #  normal connection and connector
             logging.error(f"MAIN:Already connecting!")
+        except Exception:
+            logging.error(f"Unknown error while logging in", exc_info=True)

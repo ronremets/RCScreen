@@ -44,7 +44,7 @@ class Mouse(Widget):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._app = App.get_running_app()
-        with self.canvas.after:
+        with self.canvas:
             Color(*MOUSE_OUTSIDE_COLOR)
             self.sprite_outside = Rectangle(pos=self.pos, size=self.size)
             Color(*MOUSE_INSIDE_COLOR)
@@ -91,8 +91,10 @@ class Mouse(Widget):
         return transformed_x, transformed_y
 
     def on_touch_down(self, touch):
+        print("MOUSE EXISTS")
         if not self.is_tracking:
-            return False or super().on_touch_down(touch)
+            return super().on_touch_down(touch)
+        print("MOUSE WORKS")
         self.pos = touch.pos
         if touch.is_double_tap:
             action = "click"

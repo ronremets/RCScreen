@@ -50,7 +50,7 @@ class ControlledScreen(Screen):
                                   connection used to by the mouse
         """
         self.mouse_controller.start(
-            self._app.connection_manager.connections["mouse tracker"])
+            self._app.connection_manager.client.get_connection("mouse tracker"))
 
     def _start_screen_streamer(self, connection_status):
         """
@@ -60,11 +60,11 @@ class ControlledScreen(Screen):
         """
         #self.screen_streamer.screen_recorder.image_format = self._app.screen_image_format
         self.screen_streamer.start(
-            self._app.connection_manager.connections["screen recorder"])
+            self._app.connection_manager.client.get_connection("screen recorder"))
 
     def _start_keyboard(self, connection_status):
         self.keyboard_controller.start(
-            self._app.connection_manager.connections["keyboard tracker"])
+            self._app.connection_manager.client.get_connection("keyboard tracker"))
 
     def _handle_settings_connection_status(self, connection_status):
         logging.debug(
@@ -74,7 +74,7 @@ class ControlledScreen(Screen):
 
     def _start_settings(self):
         self.session_settings.start(
-            self._app.connection_manager.connections["settings"])
+            self._app.connection_manager.client.get_connection("settings"))
         self.update_screen_size((win32api.GetSystemMetrics(0),
                                  win32api.GetSystemMetrics(1)))
 
@@ -134,13 +134,14 @@ class ControlledScreen(Screen):
         self.screen_streamer.close()
         self.mouse_controller.close()
         self.keyboard_controller.close()
-        try:
-            # TODO: change kill to False
-            self._app.connection_manager.close_connection("screen recorder",
-                                                          False)
-            self._app.connection_manager.close_connection("mouse tracker",
-                                                          False)
-            self._app.connection_manager.close_connection("keyboard tracker",
-                                                          False)
-        except Exception as e:
-            logging.error(f"socket error while closing screen recorder: {e}")
+        self.session_settings.close()
+        for connection_name in ("screen recorder",
+                                "mouse tracker",
+                                "keyboard tracker",
+                                "settings"):
+            try:
+                # TODO: change kill to False
+                self._app.connection_manager.close_connection(connection_name)
+            except Exception:
+                logging.error(f"CONTROLLED SCREEN:Error while closing"
+                              f" {connection_name}", exc_info=True)

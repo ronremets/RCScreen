@@ -5,7 +5,7 @@ __author__ = "Ron Remets"
 
 import queue
 
-from kivy.clock import Clock
+from kivy.clock import Clock, mainthread
 from kivy.app import App
 
 from component import Component
@@ -17,11 +17,13 @@ class SessionSettings(Component):
     """
     def __init__(self):
         super().__init__()
+        self._name = "session settings"
         self._app = None
         self._connection = None
         # Queue of messages with updates
         self.settings_updates = queue.Queue()
 
+    @mainthread
     def _change_other_screen(self, width, height):
         """
         Change the size of the other screen setting.
@@ -35,8 +37,7 @@ class SessionSettings(Component):
         name, value = setting.split(":")
         if name == "other screen size":
             width, height = value.split(", ")
-            Clock.schedule_once(
-                lambda _: self._change_other_screen(width, height))
+            self._change_other_screen(width, height)
         else:
             # TODO: what other settings to add?
             pass

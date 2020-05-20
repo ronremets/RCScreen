@@ -9,13 +9,22 @@ from socket import timeout as socket_timeout
 from socket import socket as socket_object
 import threading
 import time
+import ssl
+import base64
+#from Cryptodome.PublicKey import RSA
+#f#rom Cryptodome import Random
 
+from Cryptodome.Hash import SHA256
+from Cryptodome.Cipher import PKCS1_OAEP
+from Cryptodome.PublicKey import RSA
+from Cryptodome import Random
 import lz4.frame
 
 from communication.message import (Message,
                                    MESSAGE_LENGTH_LENGTH,
                                    MESSAGE_TYPE_LENGTH,
-                                   ENCODING)
+                                   ENCODING,
+                                   MESSAGE_TYPES)
 from communication import message_buffer
 
 # The time in seconds that the sockets have to receive or send before
@@ -25,6 +34,14 @@ DEFAULT_REFRESH_RATE = 1
 DEFAULT_LENGTH_BUFFER_SIZE = 2**4
 DEFAULT_TYPE_BUFFER_SIZE = 2**2
 DEFAULT_CONTENT_BUFFER_SIZE = 2**16
+#RSA_MODULUS = 2**16
+#HASH_OUTPUT_SIZE = 928
+ENCRYPTION_BUFFER_SIZE = 190#RSA_MODULUS - 2 - 2*HASH_OUTPUT_SIZE
+hostname = 'main'
+context = ssl.create_default_context()
+context.check_hostname = False
+context.verify_mode = ssl.VerifyMode.CERT_NONE
+
 
 
 class ConnectionClosed(ConnectionError):
@@ -85,10 +102,10 @@ class AdvancedSocket(object):
         with self._recv_error_state_lock:
             return self.recv_error_state
 
-    @staticmethod
-    def _pack_message(message):
+    def _pack_message(self, message):
         """
         Pack a message object to bytes.
+        :param: the message object
         :return: The message in bytes.
         """
         packed_content = lz4.frame.compress(message.content)
@@ -99,7 +116,7 @@ class AdvancedSocket(object):
         return packet
 
     @staticmethod
-    def create_connected_socket(address):
+    def create_connected_socket(address):  # TODO: not here!
         """
         Create and connect a socket. Used in cases where there is no
         socket to wrap AdvancedSocket around and instead one has to be
@@ -109,13 +126,17 @@ class AdvancedSocket(object):
         :param address: The address to connect to like (ip, port)
         :return: A socket object
         """
+        #context = ssl.create_default_context()
+        #socket_obj = socket_object()
+        #socket = context.wrap_socket(socket_obj)
         socket = socket_object()
+        socket.settimeout(DEFAULT_REFRESH_RATE)
         try:
             socket.connect(address)
         except Exception:
             socket.close()
             raise
-        return socket
+        return context.wrap_socket(socket, server_hostname=hostname)
 
     def _send_raw_data(self, data):
         """
@@ -127,7 +148,7 @@ class AdvancedSocket(object):
         total_bytes_sent = 0
         while total_bytes_sent < len(data):
             try:
-                bytes_sent = self._socket.send(data[total_bytes_sent:])
+                bytes_sent = self._socket.write(data[total_bytes_sent:])
                 if bytes_sent == 0:
                     raise RuntimeError("socket connection broken")
                 total_bytes_sent += bytes_sent
@@ -151,13 +172,18 @@ class AdvancedSocket(object):
         bytes_received = 0
         while bytes_received < length:
             try:
-                data_chunk = self._socket.recv(
+                data_chunk = self._socket.read(
                     min(length - bytes_received, buffer_size))
                 chunk_length = len(data_chunk)
                 if data_chunk == b"":
                     raise RuntimeError("socket connection broken")
                 data[bytes_received:bytes_received + chunk_length] = data_chunk
                 bytes_received += chunk_length
+            except ssl.SSLWantWriteError:
+                pass
+            except BlockingIOError:
+                print("BLOCKING!!!"*100)
+                raise
             except socket_timeout:  # Raised by the socket after timeout
                 pass
             finally:
@@ -180,10 +206,10 @@ class AdvancedSocket(object):
         message_type = self._recv_fixed_length_data(
             MESSAGE_TYPE_LENGTH,
             DEFAULT_TYPE_BUFFER_SIZE).decode(ENCODING)
-        content = lz4.frame.decompress(self._recv_fixed_length_data(
+        raw_content = self._recv_fixed_length_data(
             length,
-            buffer_size))
-        return Message(message_type, content)
+            buffer_size)
+        return Message(message_type, lz4.frame.decompress(raw_content))
 
     def _send_messages(self):
         """
@@ -205,9 +231,13 @@ class AdvancedSocket(object):
                 logging.debug("advanced_socket:Sending message: %s",
                               repr(message))
                 self._send_raw_data(
-                    AdvancedSocket._pack_message(message))
+                    self._pack_message(message))
         except ConnectionClosed:
             logging.debug("advanced_socket:Socket send thread closed normally")
+        except ssl.SSLWantReadError:
+            pass
+        except BlockingIOError:
+            print("send is blocking"*100)
         except Exception as e:
             logging.error(
                 "advanced_socket:Socket send thread crashed with error:",
@@ -226,6 +256,7 @@ class AdvancedSocket(object):
         message = None
         try:
             while True:
+                time.sleep(0)
                 # Check that you do not have to close the connection.
                 # If you do, raise an exception to close the thread.
                 with self._is_receiving_lock:
@@ -297,6 +328,7 @@ class AdvancedSocket(object):
         self._messages_to_send.add(message)
         if block_until_buffer_empty:
             while not self._messages_to_send.empty():
+                time.sleep(0)
                 with self._is_sending_lock:
                     if not self._is_sending:
                         raise ConnectionClosed()
@@ -321,6 +353,7 @@ class AdvancedSocket(object):
                 raise self._recv_error_state
         message_received = self._messages_received.pop()
         while block and message_received is None:
+            time.sleep(0)
             message_received = self._messages_received.pop()
             with self._is_receiving_lock:
                 if not self._is_receiving:
@@ -357,7 +390,6 @@ class AdvancedSocket(object):
         :param buffer_size: The size of the recv buffer.
         """
         self._socket = socket
-        self._socket.settimeout(refresh_rate)
         self._send_thread = threading.Thread(
             name="AdvancedSocket send thread",
             target=self._send_messages)
@@ -371,38 +403,65 @@ class AdvancedSocket(object):
         self._send_thread.start()
         self._recv_thread.start()
 
-    def shutdown(self, block=True):
+    def shutdown(self, block=True, timeout=None):
         """
         Shutdown the socket threads.
         Use this before close.
-        :param block: Block until threads are closed
+        :param block: If set to False, ignore timeout and do not wait
+                      for any threads to close.
+        :param timeout: The amount of time to wait for threads to close.
+                        Set to None to wait forever until close.
+
         """
         logging.debug("advanced_socket:Shutting down sockets threads")
         self.close_send_thread()
         self.close_recv_thread()
-        if block:
+
+        if not block:
+            return
+        current_timeout = timeout
+        if timeout is not None:
+            timeout_time = timeout + time.time()
+        else:
+            timeout_time = None
+
+        if self._recv_thread is not None:
             try:
-                self._recv_thread.join()
-            except AttributeError:
-                pass  # Thread not created
-            except RuntimeError:
-                pass  # Thread not started or closed
+                self._recv_thread.join(current_timeout)
+            except RuntimeError as e:
+                if e.args[0] != 'cannot join thread before it is started':
+                    raise
+            logging.debug("advanced_socket:Shut down recv socket")
+
+            if timeout is not None:
+                current_timeout = timeout_time - time.time()
+                if current_timeout <= 0:
+                    raise TimeoutError()
+
+        if self._send_thread is not None:
             try:
-                self._send_thread.join()
-            except AttributeError:
-                pass  # Thread not created
-            except RuntimeError:
-                pass  # Thread not started or closed
+                self._send_thread.join(current_timeout)
+            except RuntimeError as e:
+                if e.args[0] != 'cannot join thread before it is started':
+                    raise
+            logging.debug("advanced_socket:Shut down send socket")
+
+            if timeout is not None:
+                current_timeout = timeout_time - time.time()
+                if current_timeout <= 0:
+                    raise TimeoutError()
 
     def close(self):
         """
         Close the socket.
         Shutdown the socket before this to prevent crashing.
+        Do not close the socket while starting it since self._socket
+        is not locked. Instead wait for start to crash or finish and
+        then close.
         """
         logging.debug("advanced_socket:Closing socket")
-        try:
+        if self._socket is not None:
+            #self._socket.shutdown(socket_object.SHUT_RDWR)
             self._socket.close()
-        except AttributeError:
-            pass  # Socket not started
         self._socket = None
         logging.debug("advanced_socket:Closed socket")

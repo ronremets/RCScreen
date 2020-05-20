@@ -64,6 +64,7 @@ class KeyboardController(Component):
     """
     def __init__(self):
         super().__init__()
+        self._name = "keyboard controller"
         self._connection = None
 
     def _handle_key_state(self, key, state):

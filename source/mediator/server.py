@@ -5,36 +5,93 @@ TODO: Add exception handling.
 
 __author__ = "Ron Remets"
 
+import enum
 import logging
 import socket
 import threading
 import time
+import ssl
+import queue
 
-from message_buffer import MessageBuffer
-from user import User
-from client import Client
+from communication.message_buffer import MessageBuffer
+from communication.user import User
+from communication.client import Client
 from communication.message import Message, MESSAGE_TYPES, ENCODING
+from communication import advanced_socket  # TODO: ?????? why
 from communication.advanced_socket import AdvancedSocket
-from communication.connection import Connection
+from communication.connection import Connection, ConnectionStatus
 from users_database import UsersDatabase
 from token_generator import TokenGenerator
+from communication.connector import Connector
 
 # TODO: Add a DNS request instead of static IP and port.
-SERVER_ADDRESS = ("0.0.0.0", 2125)  # TODO: put it here or in main?
+DEFAULT_SERVER_ADDRESS = ("0.0.0.0", 2125)
 # TODO: Do we need timeout? Did we implement it all the way? How much to
 #  set it
 DEFAULT_REFRESH_RATE = 2
-t = 0
-p = False
-lt = threading.Lock()
-lp = threading.Lock()
+DEFAULT_DB_FILENAME = 'users.db'
+context = ssl.create_default_context()#ssl.Purpose.CLIENT_AUTH)#ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+context.check_hostname = False
+context.verify_mode = ssl.VerifyMode.CERT_NONE
+context.load_cert_chain('./cert/server.pem', './cert/server.key')
+
+
+class DisconnectReason(enum.Enum):
+    """
+    Reasons for the main loop of a client to close
+    """
+    CONNECTION_DISCONNECT = enum.auto()
+    CLIENT_DISCONNECT = enum.auto()
+    PARTNER_CONNECTION_DISCONNECT = enum.auto()
+    PARTNER_DISCONNECT = enum.auto()
+    SERVER_CLOSE = enum.auto()
+
+class DisconnectedError(Exception):
+    pass
+
+class ConnectionDisconnectedError(DisconnectedError):
+    pass
+
+class ClientDisconnectedError(DisconnectedError):
+    pass
+
+class PartnerDisconnectedError(DisconnectedError):
+    pass
+
+class PartnerConnectionDisconnectedError(DisconnectedError):
+    pass
+
+class ServerDisconnectedError(DisconnectedError):
+    pass
+
+
+# TODO: make sure all connections loops break when ConenctionStatus is not CONNECTED
+# TODO: make sure clients set DISCONNECTED when outside the loop
+# TODO: make sure clients set CLOSED when their thread is done
+# TODO: make every connection have its loop in its thread and share a buffer instead
+# TODO: what if connector has ERROR while closing?
+# TODO: server close - close now, server shutdown - tell connector to close everything
+#  server crash - kill everything
+
+# TODO: remember that Message().get_content_as_text()
+#  can raise UnicodeDecodeError!
+
+
+ # TODO: IMPLEMENT CONNECTOR COMMANDS QUEUE AND CLOSING!!!!!!
+
+
+
+
+
+
+
+
 class Server(object):
     """
     Handles all communication between clients.
     """
-    def __init__(self, db_file_name, refresh_rate=DEFAULT_REFRESH_RATE):
-        self.refresh_rate = refresh_rate
-        self._db_file_name = db_file_name
+    def __init__(self):
+        self._db_file_name = None
         self._server_socket = None
         self._clients = None
         self._token_generator = TokenGenerator()
@@ -63,13 +120,13 @@ class Server(object):
         :param partner_username: The username of the partner
         TODO: maybe return response code? Or response string?
         """
-        partner_username = partner_username
+        # TODO: close all connections to partner before switching
         with self._clients_lock:
             client.partner = self._clients[partner_username]
         connection.socket.send(Message(
             MESSAGE_TYPES["server interaction"],
             "set partner"))
-        logging.info("set partner to: " + str(partner_username))
+        logging.info(f"set partner to: partner_username")
 
     def _get_all_usernames(self, connection, db_connection):
         """
@@ -95,33 +152,112 @@ class Server(object):
             MESSAGE_TYPES["server interaction"],
             formatted_response))
 
-    def _run_connector(self, connection, client, db_connection):
+    def _generate_token(self, name, connection, client):
+        logging.debug(
+            f"CONNECTIONS:Making token for "
+            f"{client.user.username}'s {name}")
+        token = self._token_generator.generate(client.user.username,
+                                               name)
+        logging.debug(
+            f"CONNECTIONS:Made token {token} "
+            f"for {client.user.username}'s {name}")
+        connection.socket.send(Message(
+            MESSAGE_TYPES["server interaction"],
+            "ok\n".encode(ENCODING) + token))
+
+    def _disconnect_client(self, client, server_side):
+        try:
+            client.connector_close_all_connections(server_side)
+        finally:
+            with self._clients_lock:
+                self._clients.remove(client)
+
+    def _handle_connector_command(self,
+                                  connector,
+                                  client,
+                                  command,
+                                  from_queue):
+        """
+        Execute connector command
+        :param connector: The connector connection
+        :param client: The client of the connector
+        :param command: The command to execute
+        :param from_queue: Whether the command came from the connector's
+                           queue or from the connector socket
+        """
+        try:
+            instruction, name = Connector.parse_connector_command(command)
+        except ValueError:
+            logging.error(f"CONNECTOR:client {client.usern.username} did not"
+                          "provide the required ':' in his connector command")
+            raise ValueError("Missing the name part of the command")
+        if instruction == "close":
+            client.connector_close_connection(name, from_queue)
+        elif instruction == "generate token":
+            self._generate_token(name, connector, client)
+        elif instruction == "disconnect":
+            self._disconnect_client(client, from_queue)
+        else:
+            logging.error(f"CONNECTOR:client {client.usern.username} sent a"
+                          f"command: {command} to connector that does not "
+                          "exist")
+            raise ValueError("Not a command")
+
+    def _run_connector(self, connector, client, db_connection):
+        # TODO: IMPLEMENT CONNECTOR COMMANDS QUEUE AND CLOSING!!!!!!
         # Only connector type sockets use login and sign up and they do
         # not need the db_connection
         logging.info(f"CONNECTIONS:Started connector"
                      f" of {client.user.username}")
         db_connection.close()
-        while self.running:
-            time.sleep(0)  # Release IO
-            message = connection.socket.recv(block=False)
-            if message is None:
-                continue
-            name = message.get_content_as_text()
-            logging.debug(
-                f"CONNECTIONS:Making token for "
-                f"{client.user.username}'s {name}")
-            token = self._token_generator.generate(client.user.username,
-                                                   name)
-            logging.debug(
-                f"CONNECTIONS:Made token {token} "
-                f"for {client.user.username}'s {name}")
-            connection.socket.send(Message(
-                MESSAGE_TYPES["server interaction"],
-                "ok\n".encode(ENCODING) + token))
+        try:
+            while True:
+                if not self.running:
+                    break
+                elif connector.status is not ConnectionStatus.CONNECTED:
+                    break
+                time.sleep(0)  # Release GIL
+                message = connector.socket.recv(block=False)
+                if message is not None:
+                    command = message.get_content_as_text()
+                    self._handle_connector_command(connector,
+                                                   client,
+                                                   command,
+                                                   False)
+                time.sleep(0)  # Release GIL
+                try:
+                    command = connector.commands.get(block=False)
+                except queue.Empty:
+                    pass
+                else:
+                    self._handle_connector_command(connector,
+                                                   client,
+                                                   command,
+                                                   True)
+        except ValueError as e:
+            connector.status = ConnectionStatus.DISCONNECTING
+            if e.args[0] == "Not a command":
+                logging.error(
+                    "CONNECTIONS:Client sent connector unknown command")
+            else:
+                logging.error("CONNECTIONS:Connector error", exc_info=True)
+        except Exception:
+            logging.error("CONNECTIONS:Connector error", exc_info=True)
+        finally:
+            client.stop_adding_connections()
+            connector.status = ConnectionStatus.DISCONNECTING
+            while True:
+                time.sleep(0)
+                pass
 
     def _run_main(self, connection, client, db_connection):
-        while self.running:
-            time.sleep(0)  # Release IO
+        while True:
+            time.sleep(0)  # Release GIL
+            if connection.status is not ConnectionStatus.CONNECTED:
+                raise ConnectionDisconnectedError()
+            elif not self.running:
+                raise ServerDisconnectedError()
+
             message = connection.socket.recv(block=False)
             if message is None:
                 continue
@@ -133,35 +269,137 @@ class Server(object):
             elif params[0] == "get all connected usernames":
                 self._get_all_connected_usernames(connection)
             else:
-                pass  # TODO: Add errors here
-            # TODO: Add more commands like closing other connections of
-            #  this user and closing all connections and deleting the
-            #  user and more
+                raise ValueError("No such command")
+            # TODO: Delete user and more
+
+    def _wait_for_partner_create_connection(self, connection, client):
+        """
+        Wait until partner creates a connection
+        :param connection: The connection that will connect to the
+                           partner.
+        :param client: The client of the connection
+        :raise ConnectionDisconnectedError: If connection disconnects
+        :raise ServerDisconnectedError: If server disconnects
+        :raise ValueError: on Error
+        """
+        if connection.name == "mouse tracker":
+            print("nlsjdbskjfbdkjsdhf")
+        try:
+            while True:
+                time.sleep(0)  # Release GIL
+                # TODO: if client dies ConnectionStatus = error
+                if connection.status is not ConnectionStatus.CONNECTED:
+                    raise ConnectionDisconnectedError()
+                elif not self.running:
+                    raise ServerDisconnectedError()
+                elif client.partner.has_connection(connection.name):
+                    if connection.name == "mouse tracker":
+                        print("tlkyuhfgmnbodfighf")
+                    return
+        except AttributeError:
+            connection.status = ConnectionStatus.ERROR
+            raise ValueError("Partner was not set or disconnected")
+
+    def _wait_for_partner_connect_connection(self,
+                                             connection,
+                                             partner_connection):
+        """
+        Wait until partner connects a connection
+        :param connection: The connection that will connect to the
+                           partner.
+        :param partner_connection: The connection of the partner that
+                                   needs to connect.
+        :raise ConnectionDisconnectedError: If connection disconnects
+        :raise PartnerConnectionDisconnectedError: If the partner's
+                                                   connection
+                                                   disconnects
+        :raise ServerDisconnectedError: If server disconnects
+        """
+        while True:
+            time.sleep(0)  # Release GIL
+            if connection.status is not ConnectionStatus.CONNECTED:
+                raise ConnectionDisconnectedError()
+            elif partner_connection.status is ConnectionStatus.DISCONNECTING:
+                raise PartnerConnectionDisconnectedError()
+            elif not self.running:
+                raise ServerDisconnectedError()
+            elif partner_connection.status is ConnectionStatus.CONNECTED:
+                return
+
+    def get_partner_connection(self, connection, client):
+        """
+        Wait until the partner creates and connects his connection
+        and return that connection
+        :param connection: The connection that will connect to the
+                           partner
+        :param client: The client of the connection
+        :return: The partners connection
+        :raise ValueError: on error
+        :raise DisconnectError: (raises a subclass) if the client,
+                                partner or server disconnects
+        """
+        self._wait_for_partner_create_connection(connection, client)
+
+        try:
+            partner_connection = client.partner.get_connection(connection.name)
+        except KeyError:
+            # Since you cannot set partner without closing all
+            # connections that are connected to the partner, we can
+            # assume that partner cannot change while this code is
+            # running. I.E, if partner has a connection with the right
+            # name, he must have it now because you cannot switch to
+            # a partner that does not have the connection
+
+            # Getting partner's connection from client.partner failed
+            connection.status = ConnectionStatus.ERROR
+            raise ValueError("Partner connection does not exists")
+        except AttributeError:
+            # client.partner is None
+            connection.status = ConnectionStatus.ERROR
+            raise ValueError("Partner disconnected")
+
+        self._wait_for_partner_connect_connection(connection,
+                                                  partner_connection)
+        return partner_connection
 
     def _send_messages_to_partner(self, partner_connection, buffer):
         """
         Send messages from a buffer to partner until connection closes
-        TODO: make sure these threads close when connection closes
-         and not when server closes (instead of while self.running use
-         something like while not connection.is_closing or something
-         like that)
         :param partner_connection: The connection of the partner
         :param buffer: A reference to the buffer of messages to send
         """
         can_send_message = True
-        while self.running and partner_connection.running:
-            time.sleep(0)  # Release IO
-            message = buffer.pop()
-            if (message is not None
-                    and can_send_message
-                    and partner_connection.connected):
-                partner_connection.socket.send(message)
-                can_send_message = False
-            elif not can_send_message and partner_connection.connected:
-                # Receive an ACK
-                response = partner_connection.socket.recv(block=False)
-                if response is not None:
-                    can_send_message = True
+        try:
+            while True:
+                time.sleep(0)  # Release GIL
+                # On close, this thread should just end since it is the
+                # responsibility of the client to disconnect its partner
+                if partner_connection.status is not ConnectionStatus.CONNECTED:
+                    break
+                elif not self.running:
+                    break
+
+                message = buffer.pop()
+                if message is not None and can_send_message:
+                    partner_connection.socket.send(message)
+                    can_send_message = False
+                elif not can_send_message:
+                    # Receive an ACK
+                    response = partner_connection.socket.recv(block=False)
+                    if response is not None:
+                        can_send_message = True
+        except OSError:
+            #partner_connection.status = ConnectionStatus.ERROR
+            partner_connection.status = ConnectionStatus.DISCONNECTING
+            logging.error(f"OSError while running"
+                          f" partner connection {partner_connection.name}",
+                          exc_info=True)
+        except Exception:
+            partner_connection.status = ConnectionStatus.DISCONNECTING
+            #partner_connection.status = ConnectionStatus.ERROR
+            logging.error(f"Unknown error while running"
+                          f" partner connection {partner_connection.name}",
+                          exc_info=True)
 
     def _run_connection_to_partner(self, connection, client):
         """
@@ -169,41 +407,49 @@ class Server(object):
         and are buffered.
         :param connection: The connection that sends data.
         :param client: The client of the connection.
+        :raise DisconnectError: (raises a subclass) if the client,
+                                partner or server disconnects
+        :raise ValueError: if cant connect to the partner
         """
         logging.info("starting main loop of connection to partner")
         buffer = MessageBuffer(False)
-        while not client.partner.has_connection(connection.name):
-            time.sleep(0)  # Release IO
-            if not self.running:
-                return  # TODO: maybe go into an error state
-        partner_connection = client.partner.get_connection(connection.name)
-        while not partner_connection.connected:
-            time.sleep(0)  # Release IO
-            if not self.running:
-                return  # TODO: maybe go into an error state
+
+        partner_connection = self.get_partner_connection(connection, client)
+
         # TODO: maybe keep a reference to this thread to join it
         #  when closing the connection
-        threading.Thread(name=(f"Connection to partner {connection.name} of"
-                               f"User {client.user.username} to "
-                               f"{client.partner.user.username}"),
-                         target=self._send_messages_to_partner,
-                         args=(partner_connection, buffer)).start()
-        message = None
-        while self.running and connection.running:
-            time.sleep(0)  # Release IO
-            # TODO: what if connections turns from connected to not
-            #  connected? these if's have to handle this also close
-            if connection.connected:
+        partner_thread = threading.Thread(
+            name=(f"Connection to partner {connection.name} of "
+                  f"User {client.user.username} to "
+                  f"{client.partner.user.username}"),
+            target=self._send_messages_to_partner,
+            args=(partner_connection, buffer))
+        partner_thread.start()
+
+        try:
+            while True:
+                time.sleep(0)  # Release GIL
+                if partner_connection.status is ConnectionStatus.DISCONNECTING:
+                    raise PartnerConnectionDisconnectedError()
+                elif connection.status is ConnectionStatus.DISCONNECTING:
+                    raise ConnectionDisconnectedError()
+                elif not self.running:
+                    raise ServerDisconnectedError()
+
                 # Try to receive a message.
                 message = connection.socket.recv(block=False)
-            if message is not None:
-                # If you did receive a message, add it to the buffer.
-                buffer.add(message)
-                message = None
-                # Finally, send an ACK to get another message.
-                connection.socket.send(Message(
-                    MESSAGE_TYPES["controlled"],
-                    "Message received"))
+                if message is not None:
+                    # If you did receive a message, add it to the buffer.
+                    buffer.add(message)
+                    # Finally, send an ACK to get another message.
+                    connection.socket.send(Message(
+                        MESSAGE_TYPES["controlled"],
+                        "Message received"))
+        except ConnectionDisconnectedError:
+            partner_connection.status = ConnectionStatus.DISCONNECTING
+            raise
+        finally:
+            partner_thread.join()
 
     def _run_buffered_connection_to_partner(self, connection, client):
         """
@@ -211,26 +457,27 @@ class Server(object):
         and is buffered.
         :param connection: The connection that sends data.
         :param client: The client of the connection.
+        :raise DisconnectError: (raises a subclass) if the client,
+                                partner or server disconnects
+        :raise ValueError: if cant connect to the partner
         """
-        logging.info("starting main loop of buffered connection to partner")
-        # Wait for partner to create the connection.
-        # TODO: partner can be None and this will crash
-        while not client.partner.has_connection(connection.name):
-            time.sleep(0)  # Release IO
-            if not self.running:
-                return  # TODO: maybe go into an error state
-        partner_connection = client.partner.get_connection(connection.name)
-        # Wait for partner to connect the connection.
-        while not partner_connection.connected:
-            time.sleep(0)  # Release IO
-            if not self.running:
-                return  # TODO: maybe go into an error state
-        while self.running and connection.running:
-            time.sleep(0)  # Release IO
-            message = None
-            if connection.connected:
-                message = connection.socket.recv(block=False)
-            if message is not None and partner_connection.connected:
+        logging.info(
+            f"starting main loop of buffered "
+            f"connection {connection.name} to partner")
+
+        partner_connection = self.get_partner_connection(connection, client)
+        logging.debug(f"Got connection {partner_connection.name} of "
+                      f"partner of {client.user.username}")
+        while True:
+            time.sleep(0)  # Release GIL
+            if partner_connection.status is not ConnectionStatus.CONNECTED:
+                raise PartnerConnectionDisconnectedError()
+            elif connection.status is not ConnectionStatus.CONNECTED:
+                raise ConnectionDisconnectedError()
+            elif not self.running:
+                raise ServerDisconnectedError()
+            message = connection.socket.recv(block=False)
+            if message is not None:
                 partner_connection.socket.send(message)
 
     def _get_client(self, connection_name, username, token):
@@ -315,11 +562,12 @@ class Server(object):
                 database_connection.close()
             raise
 
-        connection = Connection(
+        connection = Connector(
             connection_name,
             connection_socket,
             connection_type)
-        connection.start()  # TODO: is this fine? check the rest of the code
+        connection.status = ConnectionStatus.CONNECTING
+        # connection.start()  # TODO: is this fine? check the rest of the code
         user = User(username, password)
 
         # Remember that the client has to not be connected to pass
@@ -377,12 +625,13 @@ class Server(object):
             connection_socket,
             connection_type)
         connection.start()  # TODO: is this fine? check the rest of the code
+        database_connection = UsersDatabase(self._db_file_name)
         client = self._get_client(connection.name, username, token)
         client.add_connection(connection)
         logging.debug(
             f"CONNECTIONS:Connection {connection.name} "
             f"added to {client.user.username}")
-        return connection, client, UsersDatabase(self._db_file_name)
+        return connection, client, database_connection
 
     def _connect_connection(self, connection_advanced_socket):
         """
@@ -392,12 +641,13 @@ class Server(object):
         :return: Connection object and its client object and its
                  connection to the database
         """
-        connection_status = "ready"
         connecting_method = connection_advanced_socket.recv(
         ).get_content_as_text()
         logging.info("connecting method: " + connecting_method)
+        # TODO: dont decode or use base64 on token
         connection_info = connection_advanced_socket.recv(
         ).get_content_as_text().split("\n")
+
         try:
             if connecting_method == "login":
                 connection, client, db_connection = self._login(
@@ -413,6 +663,8 @@ class Server(object):
                     connection_info)
             else:
                 raise ValueError("Bad method")
+        # If an value error occurs, set the connection status to the string of
+        # the error
         except ValueError as e:
             error_string = e.args[0]
             if error_string in ("username does not exists",
@@ -420,23 +672,33 @@ class Server(object):
                 connection_status = "Username or password are wrong"
             else:
                 connection_status = e.args[0]
-        except Exception:
-            logging.error("Unknown error while connecting", exc_info=True)
-            raise ValueError("Could not connect")
-        connection_advanced_socket.send(Message(
-            MESSAGE_TYPES["server interaction"],
-            connection_status))
-        # Make sure buffers are empty before switching
-        response = connection_advanced_socket.recv(block=True).get_content_as_text()
-        if response != "ready":
-            logging.debug(
-                f"CONNECTIONS:Crashed with "
-                f"connection status: {response}")
-            raise ValueError("could not connect")
-        logging.debug(
-            f"CONNECTIONS:{connection.name} "
-            f"connection status: {response}")
-        return connection, client, db_connection
+            connection_advanced_socket.send(Message(
+                MESSAGE_TYPES["server interaction"],
+                connection_status))
+            raise
+        else:
+            try:
+                connection_advanced_socket.send(Message(
+                    MESSAGE_TYPES["server interaction"],
+                    "ready"))
+                # TODO: what if server closes? block=True can hang!
+                # Make sure buffers are empty before switching
+                client_connection_status = connection_advanced_socket.recv(
+                    block=True).get_content_as_text()
+                if client_connection_status != "ready":
+                    logging.debug(
+                        f"CONNECTIONS:Crashed with "
+                        f"connection status: {client_connection_status}")
+                    raise ValueError(
+                        f"Client sent error:{client_connection_status}")
+                logging.debug(
+                    f"CONNECTIONS:{connection.name} "
+                    f"connection status: {client_connection_status}")
+            except Exception:
+                connection.status = ConnectionStatus.ERROR
+                client.remove_connection(connection.name)
+                raise
+            return connection, client, db_connection
 
     def _run_main_loop_of_connection(self, connection, client, db_connection):
         """
@@ -451,13 +713,16 @@ class Server(object):
             f"for connection {connection.name}")
         if connection.type == "connector":
             connection.connected = True
+            connection.status = ConnectionStatus.CONNECTED
             self._run_connector(connection, client, db_connection)
         elif connection.type == "main":
             connection.connected = True
+            connection.status = ConnectionStatus.CONNECTED
             self._run_main(connection, client, db_connection)
         elif connection.type == "settings":
             logging.info("connecting two ways buffered sender socket")
             connection.socket.switch_state(True, True)
+            connection.status = ConnectionStatus.CONNECTED
             connection.connected = True
             self._run_buffered_connection_to_partner(connection, client)
         elif connection.type in ("keyboard - sender", "mouse - sender"):
@@ -470,6 +735,7 @@ class Server(object):
             logging.debug(
                 f"closing send thread of connection {connection.name}")
             connection.socket.close_send_thread()
+            connection.status = ConnectionStatus.CONNECTED
             connection.connected = True
             self._run_buffered_connection_to_partner(connection, client)
         elif connection.type in ("keyboard - receiver", "mouse - receiver"):
@@ -481,46 +747,136 @@ class Server(object):
             # CPU usage.
             logging.debug(f"closing recv thread of connection {connection.name}")
             connection.socket.close_recv_thread()
+            connection.status = ConnectionStatus.CONNECTED
             connection.connected = True
             db_connection.close()
         elif connection.type == "frame - sender":
             logging.info("connecting unbuffered sender socket")
             connection.socket.switch_state(False, True)
+            connection.status = ConnectionStatus.CONNECTED
             connection.connected = True
             self._run_connection_to_partner(connection, client)
         elif connection.type == "frame - receiver":
             logging.info("connecting unbuffered receiver socket")
             connection.socket.switch_state(True, False)
+            connection.status = ConnectionStatus.CONNECTED
             connection.connected = True
             db_connection.close()
         else:
             raise ValueError("Connection type does not exists")
 
-    def _run_connection(self, connection_socket):
+    def _disconnect_partner(self, connection, client, partner_disconnected):
+        partner = client.partner
+        partner_connection = partner.get_connection(connection.name)
+        partner_connector = partner.get_connection("connector")
+        # TODO: IMPLEMENT CONNECTOR COMMANDS QUEUE AND CLOSING!!!!!!
+        if not partner_disconnected:
+            partner_connector.commands.put(f"close:{connection.name}")
+        while True:
+            time.sleep(0)  # Release GIL
+            if partner_connector.status is not ConnectionStatus.CONNECTED:
+                break  # TODO: other side connector crashed
+            elif partner_connection.status is not ConnectionStatus.CONNECTED:
+                break
+        partner.close_connection(partner_connection)
+
+    def _disconnect_connection(self, connection, client, disconnect_error):
+        """
+        Disconnect the connection according to the disconnect_error
+        :param connection: The connection to disconnect
+        :param client: The client of the connection
+        :param disconnect_error: The error that caused the disconnect
+        """
+        #if isinstance(disconnect_error, ConnectionDisconnectedError):
+        # TODO: disconnect partner in another thread?
+        if connection.type in ("frame - sender",
+                               "keyboard - sender",
+                               "mouse - sender",
+                               "settings"):
+            if not isinstance(disconnect_error,
+                              PartnerConnectionDisconnectedError):
+                partner_connector = client.partner.get_connection("connector")
+                partner_connector.commands.put(f"close:{connection.name}")
+                partner_connection = client.partner.get_connection(connection.name)
+                # wait for the partner to close and then close
+                while True:
+                    time.sleep(0)  # Release GIL
+                    if partner_connector.status is not ConnectionStatus.CONNECTED:
+                        break  # TODO: other side connector crashed
+                    elif partner_connection.status is not ConnectionStatus.CONNECTED:
+                        break
+        elif connection.type in ("keyboard - receiver",
+                                 "mouse - receiver",
+                                 "frame - receiver"):
+            self._disconnect_partner(
+                connection,
+                client,
+                isinstance(disconnect_error,
+                           PartnerConnectionDisconnectedError))
+        client.close_connection(connection)
+
+    def _run_connection(self, connection_socket, address):
         """
         run a connection to a client until the server closes
         :param connection_socket: the socket of the connection
+        :param address: the address of the socket
         """
         connection_advanced_socket = AdvancedSocket()
         connection_advanced_socket.start(connection_socket, True, True)
         try:
             connection, client, db_connection = self._connect_connection(
                 connection_advanced_socket)
-        except ValueError as e:
-            if e.args[0] == "could not connect":
-                # TODO: maybe reconnect socket here
-                pass
-            #else:
-            logging.error("SERVER:Socket error", exc_info=True)
-            connection_advanced_socket.shutdown()
-            connection_advanced_socket.close()
+        # TODO: maybe reconnect socket on value error
         except Exception:
-            logging.error("SERVER:Socket error", exc_info=True)
-            connection_advanced_socket.shutdown()
-            connection_advanced_socket.close()
+            logging.error(f"SERVER:Socket {address} crashed while connecting",
+                          exc_info=True)
+            try:
+                connection_advanced_socket.shutdown()
+                connection_advanced_socket.close()
+            except Exception:
+                logging.error(f"SERVER:Crashed while closing {address}",
+                              exc_info=True)
         else:
-            # TODO: try except here
-            self._run_main_loop_of_connection(connection, client, db_connection)
+            try:
+                self._run_main_loop_of_connection(connection,
+                                                  client,
+                                                  db_connection)
+            except DisconnectedError as disconnect_error:
+                self._disconnect_connection(connection,
+                                            client,
+                                            disconnect_error)
+            except Exception as error:
+                logging.error(
+                    (f"SERVER:Client {client.user.username}'s connection"
+                     f"{connection.name} crashed while running"),
+                    exc_info=True)
+                try:
+                    self._disconnect_connection(connection,
+                                                client,
+                                                error)
+                except Exception:
+                    logging.error(("SERVER:Crashed while closing client:"
+                                   f"{client.user.username}'s connection:"
+                                   f"{connection.name} trying to crash the"
+                                   " socket instead"),
+                                  exc_info=True)
+                    try:
+                        if not client.safe_remove_connection(connection):
+                            logging.debug(
+                                ("SERVER:While crashing connection:"
+                                 f"{connection.name} of client: "
+                                 f"{client.user.username}, when removing the"
+                                 "connection, the client did not have the "
+                                 "connection"))
+                        connection_advanced_socket.shutdown()
+                        connection_advanced_socket.close()
+                    except Exception:
+                        logging.error(
+                            f"SERVER:Crashed while crashing {address}",
+                            exc_info=True)
+
+            # If main loop exits and does not raise DisconnectError,
+            # then that means it is handled in another thread
 
     def _accept_connections(self):
         """
@@ -528,55 +884,111 @@ class Server(object):
         """
         while self.running:
             try:
-                connection_socket, addr = self._server_socket.accept()
-                logging.info(f"New client: {addr}")
-                threading.Thread(
-                    name=f"Accept {addr} thread",
-                    target=self._run_connection,
-                    args=(connection_socket,)).start()
+                connection_socket, address = self._server_socket.accept()
+                connection_socket.settimeout(advanced_socket.DEFAULT_REFRESH_RATE)
+                secure_connection = context.wrap_socket(
+                    connection_socket,
+                    server_side=True)
+            except ssl.SSLError:
+                logging.error("ACCEPT:SSL error:", exc_info=True)
             except socket.timeout:
                 pass
+            else:
+                logging.info(f"ACCEPT:New client: {address}")
+                threading.Thread(
+                    name=f"Accept {address} thread",
+                    target=self._run_connection,
+                    args=(secure_connection, address)).start()
+        logging.info("ACCEPT:closing server socket")
+        try:
+            self._server_socket.close()
+        except OSError:
+            logging.error("ACCEPT:Error while closing server socket",
+                          exc_info=True)
+        logging.info("ACCEPT:accept thread exiting")
 
-    #def _remove_closed_connections(self):
-        """
-        Remove closed connections from the list of connections until
-        the server closes.
-        """
-        # TODO: Rethink this. Is it necessary? Any faster way of doing
-        #  this?
-    #    while self.running:
-    #        with self._connections_lock:
-                # Create a shallow copy of the list because of the
-                # for loop.
-    #            for connection in self._connections[:]:
-    #                if not connection.running:
-    #                    self._connections.remove(connection)
-
-    def start(self):
+    def start(self,
+              address=DEFAULT_SERVER_ADDRESS,
+              db_file_name=DEFAULT_DB_FILENAME,
+              refresh_rate=DEFAULT_REFRESH_RATE):
         """
         Start the server.
+        :param address: The (ip, port) of the server.
+        :param db_file_name: The filename of the database.
+        :param refresh_rate: The time between checking if threads needs
+                             to close.
         """
+        #self._context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        #self._context.load_cert_chain(certfile="mycertfile",
+        #                              keyfile="mykeyfile")
+
+        self._db_file_name = db_file_name
+        #self._clients_threads = {}
         self._clients = {}
+        # TODO: now need to keep reference since accept thread handles it
         self._server_socket = socket.socket()
-        self._server_socket.settimeout(DEFAULT_REFRESH_RATE)
-        self._server_socket.bind(SERVER_ADDRESS)
+        self._server_socket.settimeout(refresh_rate)
+        self._server_socket.bind(address)
         self._server_socket.listen()  # TODO: Add parameter here.
+        #self._server_socket = context.wrap_socket(self._server_socket,
+        #                                          server_side=True)
         self._accept_connections_thread = threading.Thread(
             name="accept connections thread",
             target=self._accept_connections)
         self._set_running(True)
         self._accept_connections_thread.start()
-        logging.info("done starting server")
 
-    def close(self, timeout=None):
+    def shutdown(self, timeout=None):
         """
-        Close the server.
-        :param timeout: If not None, the amount of seconds to wait
-                        when closing
+        Close all threads
+        :param timeout: The amount of seconds to wait for threads to
+                        close before closing the server
+        :raise TimeoutError: If timeout occurs. Some threads might
+                             still be open. Call this again to close
+                             them. (If no timeout occurs, all threads
+                             are closed)
         """
         self._set_running(False)
-        self._connect_connections_thread.join(timeout)
-        #self._remove_closed_connections_thread.join()
+        """timeout_time = None
+        current_timeout = timeout
+        if timeout is not None:
+            timeout_time = time.time() + timeout
+        self._set_running(False)
+        try:
+            if self._accept_connections_thread is not None:
+                self._accept_connections_thread.join(current_timeout)
+        except RuntimeError as e:
+            # Raise if error is not that thread was already closed
+            if e.args[0] != 'cannot join thread before it is started':
+                raise
+        self._accept_connections_thread = None
+        if timeout is not None:
+            current_timeout = timeout_time - time.time()
+            if current_timeout <= 0:
+                raise TimeoutError()
+        # Other clients can not connect
+        with self._clients_threads_lock:
+            for client_thread in self._clients_threads.values()[:]:
+                if timeout is not None:
+                    current_timeout = timeout_time - time.time()
+                    if current_timeout <= 0:
+                        raise TimeoutError()
+                try:
+                    client_thread.join(current_timeout)
+                except RuntimeError as e:
+                    # Raise if error is not that thread was already closed
+                    if e.args[0] != 'cannot join thread before it is started':
+                        raise
+                if not client_thread.is_alive:
+                    self._clients_threads.remove(client_thread)"""
+
+    def close(self):
+        """
+        Close the server.
+        """
         # TODO: Make sure all connections are closed before calling close
         #  on server socket
+        #with self._clients_lock:
+        #    for client in self._clients[:]:
+        #        client.close_all_connections()
         self._server_socket.close()

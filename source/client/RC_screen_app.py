@@ -15,7 +15,7 @@ from kivy.properties import (BooleanProperty,
 from connection_manager import ConnectionManager
 
 import ui
-
+# 134.122.92.76
 SERVER_ADDRESS = ("127.0.0.1", 2125)
 DEFAULT_SCREEN_IMAGE_FORMAT = "png"
 

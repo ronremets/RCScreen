@@ -10,7 +10,6 @@ import win32con
 import win32gui
 
 from components.component import Component
-from streamed_controller import CONTROLLER_INSTRUCTIONS
 
 DEFAULT_CLICK_DELAY = 0.1
 
@@ -21,6 +20,7 @@ class MouseController(Component):
     """
     def __init__(self):
         super().__init__()
+        self._name = "Mouse controller"
         self._connection = None
         self._click_delay_lock = threading.Lock()
         self.click_delay = DEFAULT_CLICK_DELAY

@@ -4,8 +4,6 @@ A user
 
 __author__ = "Ron Remets"
 
-import threading
-
 
 class User(object):
     """
