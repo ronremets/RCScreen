@@ -4,10 +4,10 @@ The error popup.
 
 __author__ = "Ron Remets"
 
-from kivy.uix.widget import Widget
+from kivy.uix.popup import Popup
 
 
-class ErrorPopup(Widget):
+class ErrorPopup(Popup):
     """
     When an error occurs, notify the user it occurred.
     """

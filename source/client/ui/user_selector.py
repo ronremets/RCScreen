@@ -5,7 +5,10 @@ __author__ = "Ron Remets"
 
 from kivy.app import App
 from kivy.clock import Clock
-from kivy.properties import ObjectProperty, BooleanProperty, ListProperty, StringProperty
+from kivy.properties import (ObjectProperty,
+                             BooleanProperty,
+                             ListProperty,
+                             StringProperty)
 from kivy.uix.button import Button
 from kivy.uix.dropdown import DropDown
 from kivy.logger import Logger
@@ -15,15 +18,6 @@ from communication.advanced_socket import ConnectionClosed
 
 UPDATE_USERS_REFRESH_RATE = 1.5
 
-import time
-def timeit(func):
-    def _update_users(*args, **kwargs):
-        b = time.time()
-        out = func(*args, **kwargs)
-        a = time.time()
-        print("The function took:", a - b)
-        return out
-    return _update_users
 
 class UserSelector(Button):
     """
@@ -45,13 +39,11 @@ class UserSelector(Button):
         self.users_dropdown = DropDown(on_select=self._select_user)
         print("constructor called")
 
-    def _select_user(self, button, username):
+    def _select_user(self, _, username):
         """
         Select a user
-        :param button: The button that called select
         :param username: The username to select
         """
-        print(f"button: {button}\nusername:{username}")
         self.selected_username = username
         self._new_user_selected = True
         Logger.info(f"User selector:Selected partner: {username}")
@@ -59,13 +51,23 @@ class UserSelector(Button):
     def _check_for_usernames_response(self):
         return self._connection.socket.recv(block=False)
 
-    def _handle_usernames_response(self, response):
+    @staticmethod
+    def _handle_usernames_response(response):
+        """
+        parse the usernames from the server response
+        :param response: The response the server sent
+        :return: A list of the usernames the server sent
+        """
         usernames = response.get_content_as_text().split(", ")
         Logger.debug(
             f"User selector:Received usernames: {usernames}")
         return usernames
 
     def _update_dropdown(self, usernames):
+        """
+        Update the list of the usernames the dropdown displays
+        :param usernames: The usernames to display
+        """
         self.users_dropdown.clear_widgets()
         for username in usernames:
             self.users_dropdown.add_widget(Button(
@@ -91,18 +93,19 @@ class UserSelector(Button):
             "get all connected usernames"))
 
     def _send_select_request(self):
-        Logger.debug(f"User selector:Sending set partner: {self.selected_username}")
+        Logger.debug(
+            f"User selector:Sending set partner: {self.selected_username}")
         self._connection.socket.send(Message(
             MESSAGE_TYPES["server interaction"],
             f"set partner\n{self.selected_username}"))
 
-    @timeit
     def _update_users(self, _):
         try:
             if self._updating_users:
                 usernames_response = self._check_for_usernames_response()
                 if usernames_response is not None:
-                    usernames = self._handle_usernames_response(usernames_response)
+                    usernames = UserSelector._handle_usernames_response(
+                        usernames_response)
                     self._update_dropdown(usernames)
                     self._updating_users = False
             elif self._selecting_user:
@@ -121,7 +124,8 @@ class UserSelector(Button):
         except ConnectionClosed:  # Unexpected close
             Logger.error("User selector:Unexpected close, closing!")
             self.close()
-        except Exception:  # TODO: be more specific
+        except Exception as e:  # TODO: be more specific
+            print(e)
             Logger.error("User selector:Unexpected error, closing!",
                          exc_info=True)
             self.close()

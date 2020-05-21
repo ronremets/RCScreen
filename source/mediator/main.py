@@ -6,9 +6,6 @@ __author__ = "Ron Remets"
 
 import logging
 import sys
-import traceback
-import threading
-import queue
 
 from server import Server
 from users_database import UsersDatabase
@@ -48,23 +45,24 @@ def _command_shutdown_server(server):
     :param server: The server to shutdown
     :return: Whether to close the server
     """
-    print("Type the timeout for shutdown. Type 'None' to not use timeout")
-    timeout = input()
-    if timeout.lower() != "none":
-        try:
-            timeout = float(timeout)
-        except ValueError as e:
-            print(e)  # TODO: remove
-            logging.error("Input was not a number, aborting shutdown")
-            print("Please enter a number or None. Aborting shutdown.")
-            return False
-    else:
-        timeout = None
+    # print("Type the timeout for shutdown. Type 'None' to not use timeout")
+    # timeout = input()
+    # if timeout.lower() != "none":
+    #     try:
+    #         timeout = float(timeout)
+    #     except ValueError as value_error:
+    #         print(value_error)
+    #         logging.error("Input was not a number, aborting shutdown")
+    #         print("Please enter a number or None. Aborting shutdown.")
+    #         return False
+    # else:
+    #     timeout = None
 
     logging.info(f"MAIN:Shutting down server")
     try:
-        server.shutdown(timeout=timeout)
-    except Exception:
+        server.shutdown()
+    except Exception as e:
+        print(e)
         logging.critical("MAIN:Error while Shutting down server:",
                          exc_info=True)
     else:
@@ -88,7 +86,8 @@ def _command_close_server(server):
     logging.info(f"MAIN:Closing server")
     try:
         server.close()
-    except Exception:
+    except Exception as e:
+        print(e)
         logging.critical("MAIN:Error while closing server:", exc_info=True)
     else:
         logging.info(f"MAIN:Closed server")
@@ -104,7 +103,8 @@ def _command_quick_close(server):
     try:
         if not _command_shutdown_server(server):
             _command_close_server(server)
-    except Exception:
+    except Exception as e:
+        print(e)
         logging.critical("MAIN:Error while quick closing server:",
                          exc_info=True)
     return True
@@ -136,7 +136,8 @@ def _start_server(server):
                   "It might help to reset the computer.")
         logging.error("MAIN:Error while creating server!",
                       exc_info=True)
-    except Exception:
+    except Exception as e:
+        print(e)
         logging.error("MAIN:Error while running server:", exc_info=True)
 
 
@@ -165,7 +166,8 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except Exception:
+    except Exception as outer_e:
+        print(outer_e)
         logging.critical("MAIN:Error while running:", exc_info=True)
         sys.exit(1)
     else:

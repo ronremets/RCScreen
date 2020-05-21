@@ -3,7 +3,6 @@ Controls the keyboard
 """
 __author__ = "Ron Remets"
 
-import time
 import win32api
 import win32con
 
@@ -67,7 +66,8 @@ class KeyboardController(Component):
         self._name = "keyboard controller"
         self._connection = None
 
-    def _handle_key_state(self, key, state):
+    @staticmethod
+    def _handle_key_state(key, state):
         """
         Press or release a key
         :param key: The key to press as a string (following the kivy
@@ -88,53 +88,13 @@ class KeyboardController(Component):
             # TODO: log bad key here
             pass
         else:
-            print(f"key {key}")
-            #win32api.keybd_event(keycode, 0, flags, 0)
-
-    """def keyb(self,
-             char=None,
-             shift=False,
-             control=False,
-             alt=False,
-             delaik=0.02):
-        for b in char:
-            c = b
-            if 'A' <= b <= 'Z' or shift:
-                win32api.keybd_event(win32con.VK_SHIFT, 0, 0, 0)
-            if 'a' <= b <= 'z':
-                c = b.upper()
-            if alt:
-                win32api.keybd_event(win32con.VK_MENU, 0, 0, 0)
-                time.sleep(0.250)
-            if control:
-                win32api.keybd_event(win32con.VK_CONTROL, 0, 0, 0)
-            cord = ord(c)
-
-            win32api.keybd_event(cord, 0, win32con.KEYEVENTF_EXTENDEDKEY | 0,
-                                 0)
-            if delaik > 0.0:
-                time.sleep(delaik)
-            win32api.keybd_event(cord, 0, win32con.KEYEVENTF_EXTENDEDKEY |
-                                 win32con.KEYEVENTF_KEYUP, 0)
-            if delaik > 0.0:
-                time.sleep(delaik)
-
-            if control:
-                win32api.keybd_event(win32con.VK_CONTROL, 0,
-                                     win32con.KEYEVENTF_KEYUP, 0)
-            if alt:
-                win32api.keybd_event(win32con.VK_MENU, 0,
-                                     win32con.KEYEVENTF_KEYUP, 0)
-                time.sleep(0.05)
-            if 'A' <= b <= 'Z' or shift:
-                win32api.keybd_event(win32con.VK_SHIFT, 0,
-                                     win32con.KEYEVENTF_KEYUP, 0)"""
+            win32api.keybd_event(keycode, 0, flags, 0)
 
     def _update(self):
         message = self._connection.socket.recv(block=False)
         if message is not None:
             key, state = message.get_content_as_text().split(", ")
-            self._handle_key_state(key, state)
+            KeyboardController._handle_key_state(key, state)
 
     def start(self, connection):
         """

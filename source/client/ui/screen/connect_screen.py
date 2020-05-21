@@ -5,15 +5,10 @@ The connect screen.
 __author__ = "Ron Remets"
 
 import logging
-import threading
-import time
 
 from kivy.app import App
 from kivy.uix.screenmanager import Screen
 from kivy.properties import ObjectProperty
-from kivy.clock import Clock
-
-from communication.message import Message, MESSAGE_TYPES
 
 
 class ConnectScreen(Screen):
@@ -27,7 +22,6 @@ class ConnectScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._app = App.get_running_app()
-        #self._app.bind(on_partner=self._update_selection)
 
     def connect(self):
         """
@@ -39,7 +33,7 @@ class ConnectScreen(Screen):
         self._app.root.current = (
             "controller" if self._app.is_controller else "controlled")
 
-    def _update_selection(self, instance, username):
+    def _update_selection(self, _, username):
         """
         Update partner's label to the new username.
         :param username: The partner's username.
@@ -55,17 +49,13 @@ class ConnectScreen(Screen):
         """
         if connection_status == "ready":
             self.user_selector.start(
-                self._app.connection_manager.client.get_connection("get users"))
-        else:
-            # state error
-            pass
+                self._app.connection_manager.client.get_connection(
+                    "get users"))
 
     def on_enter(self):
         """
         Start all the components and connections
         """
-        #self._app(on_partner=lambda value:)
-        #self.partner_label.bind(text=self._app.partner)
         self._app.connection_manager.add_connection(
             self._app.username,
             "get users",

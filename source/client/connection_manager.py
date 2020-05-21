@@ -8,12 +8,9 @@ import threading
 import queue
 import time
 
-# from communication import communication_protocol
-from communication.advanced_socket import (AdvancedSocket,
-                                           ConnectionClosed)
+from communication.advanced_socket import AdvancedSocket
 from communication.connection import Connection, ConnectionStatus
 from communication.message import Message, MESSAGE_TYPES, ENCODING
-from communication.connection import ConnectionStatus
 from communication.connector import Connector
 from communication.client import Client
 from communication.user import User
@@ -28,17 +25,10 @@ class ConnectionManager(object):
     """
     def __init__(self):
         self._running_lock = threading.Lock()
-        self._connections_lock = threading.Lock()
         self._tokens_lock = threading.Lock()
         self._client_lock = threading.Lock()
         # All the available tokens as dict like {name: token}
         self._tokens = None
-        # All the connections
-        self._connections = None
-        # A queue for commands for the connector
-        self._commands = None
-        # A connection that adds other connections
-        self._connector = None
         self._connector_thread = None
         self._server_address = None
         self._set_running(False)
@@ -57,15 +47,12 @@ class ConnectionManager(object):
             self._running = value
 
     @property
-    def connections(self):
-        """
-        :return: A dictionary with all the connections to the server
-        """
-        with self._connections_lock:
-            return self._connections
-
-    @property
     def client(self):
+        """
+        The client that holds all the connections
+        :return: A client object. The reference is thread safe but the
+                 object itself is not
+        """
         with self._client_lock:
             return self._client
 
@@ -78,11 +65,11 @@ class ConnectionManager(object):
         :param callback: The function to call after connecting
                          (From the connecting thread)
         """
-        socket = None
         connector = self.client.get_connection("connector")
+        connection_status = "Unexpected error (unreachable code)"
         try:
-            socket = AdvancedSocket.create_connected_socket(self._server_address)
-            # self._connector.socket.start(socket, True, True)
+            socket = AdvancedSocket.create_connected_socket(
+                self._server_address)
             connector.socket.start(socket, True, True)
             logging.debug(f"CONNECTION:Sending connector method: {method}")
             connector.socket.send(Message(
@@ -104,28 +91,28 @@ class ConnectionManager(object):
             logging.debug("CONNECTIONS:Receiving connection status")
             connection_status = connector.socket.recv().get_content_as_text()
             if connection_status != "ready":
-                raise ValueError(f"bad connection status: {connection_status}")
+                raise ValueError(connection_status)
             logging.info(
-                f"CONNECTIONS:Connection status of connector: {connection_status}")
+                f"CONNECTIONS:Connection status of connector:"
+                f" {connection_status}")
             connector.socket.send(Message(
                 MESSAGE_TYPES["server interaction"],
                 "ready"),
                 block_until_buffer_empty=True)
             logging.debug(
                 f"CONNECTIONS:connector sent ready")
-            # A system admin can send a disconnect request. As a result,
-            # we need to make sure connector is ready to receive commands
-            # before it is considered connected but because it uses TCP
-            # the command must come after 'connected' message and so
-            # we dont need to send 'connected' from connector
-            # self._connector.connected = True
             connector.status = ConnectionStatus.CONNECTED
-        except ConnectionClosed as e:
-            connection_status = "Unexpected close"
-            if socket is not None:
-                if socket.running:
-                    socket.close()
+        except ValueError as e:
+            connector.status = ConnectionStatus.ERROR
+            connection_status = str(e)
+            # TODO: is that what you want? or should you call a func?
+            connector.socket.shutdown()
+            connector.socket.close()
+            with self._client_lock:
+                self._client = None
+            raise
         except Exception as e:
+            print(e)
             connector.status = ConnectionStatus.ERROR
             connection_status = "Exception while creating socket"
             # TODO: is that what you want? or should you call a func?
@@ -133,8 +120,10 @@ class ConnectionManager(object):
             connector.socket.close()
             with self._client_lock:
                 self._client = None
-        if callback is not None:
-            callback(connection_status)
+            raise
+        finally:
+            if callback is not None:
+                callback(connection_status)
 
     def _get_token(self, name):
         """
@@ -197,7 +186,11 @@ class ConnectionManager(object):
         :param callback: The function to call after connecting
                          (From the connecting thread)
         """
-        self._add_connector(username, password, method, callback=callback)
+        try:
+            self._add_connector(username, password, method, callback=callback)
+        except Exception as e:
+            print(e)
+            return
         connector = self.client.get_connection("connector")
         client_side_is_closing = True
         try:
@@ -224,7 +217,8 @@ class ConnectionManager(object):
                 if connector.status is not ConnectionStatus.CONNECTED:
                     client_side_is_closing = False
                     break  # TODO: what to do here?
-        except Exception:
+        except Exception as e:
+            print(e)
             logging.error("CONNECTIONS:Connector error", exc_info=True)
             connector.status = ConnectionStatus.DISCONNECTING
         finally:
@@ -263,8 +257,8 @@ class ConnectionManager(object):
         logging.debug(f"CONNECTIONS:starting connector thread")
         self._connector_thread.start()
 
-    def _connect_connection(self,
-                            connection,
+    @staticmethod
+    def _connect_connection(connection,
                             username,
                             token,
                             buffer_state,
@@ -321,7 +315,6 @@ class ConnectionManager(object):
             connection.socket.close_send_thread()
         if only_send:
             connection.socket.close_recv_thread()
-        #connection.connected = True
         connection.status = ConnectionStatus.CONNECTED
         return connection_status
 
@@ -363,7 +356,8 @@ class ConnectionManager(object):
             time.sleep(0)
             with self._tokens_lock:
                 if name in self._tokens:
-                    response = self._tokens.pop(name)  # TODO: error can be client timeout
+                    # TODO: error can be client timeout
+                    response = self._tokens.pop(name)
                     break
         if response["status"] == "ok":
             # Create and connect a socket. If the an exception is raised
@@ -371,12 +365,13 @@ class ConnectionManager(object):
             sock = AdvancedSocket.create_connected_socket(
                 self._server_address)
             connection.socket.start(sock, True, True)
-            connection_status = self._connect_connection(connection,
-                                                         username,
-                                                         response["token"],
-                                                         buffer_state,
-                                                         only_send,
-                                                         only_recv)
+            connection_status = ConnectionManager._connect_connection(
+                connection,
+                username,
+                response["token"],
+                buffer_state,
+                only_send,
+                only_recv)
         else:
             # raise ValueError("TOKEN ERROR") TODO: is this what you want?
             connection_status = "TOKEN ERROR"  # TODO: or this?
@@ -450,34 +445,29 @@ class ConnectionManager(object):
         """
         # The server address
         self._server_address = server_address
-        # All the connections
-        # self._connections = dict()
-        # all the names of the connections that need tokens
-        # self._commands = queue.SimpleQueue()
         # All the tokens like {connection.name: token}
         self._tokens = {}
-        # # A connection that adds other connections
-        # self._connector = Connection("connector",
-        #                              AdvancedSocket(),
-        #                              "connector")
-        # self._set_running(True)
+        self._set_running(True)
 
-    def close(self, block=True):
+    def close(self):  # , block=True):
         """
         Close the connection manager and all the sockets
-        :param block: Whether to wait for all threads to stop.
+        param block: Whether to wait for all threads to stop.
         """
         # connections = list(self.connections.values())
         # for connection in connections[:]:
         #     self.close_connection(connection.name)
-        # self._set_running(False)
+        self._set_running(False)
         # self._connector.close()
-        self.client.get_connection("connector").commands.put("disconnect:")
-        with self._client_lock:
-            with self._client._connections_lock:
-                connections = self._client._connections.keys()[:]
-        for connection in connections:
-            self.close_connection(connection.name)
+        try:
+            if self.client is not None:
+                self.client.get_connection("connector").commands.put(
+                    "disconnect:")
+                for connection in self.client.get_all_connections():
+                    self.close_connection(connection.name)
+        except Exception as e:
+            print(e)
+            logging.error("CONNECTIONS:Cant close connections")
         """"# TODO: add kill if block = False
         # TODO: add closing all sockets and threads here
         self._set_running(False)

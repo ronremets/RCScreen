@@ -1,3 +1,6 @@
+"""
+A connection designed for connecting and disconnecting other connections
+"""
 __author__ = "Ron Remets"
 
 import queue
@@ -6,6 +9,10 @@ from communication.connection import Connection
 
 
 class Connector(Connection):
+    """
+    A connection designed for connecting and disconnecting other
+     connections
+    """
     def __init__(self, name, socket, connection_type):
         super().__init__(name, socket, connection_type)
         self.commands = queue.Queue()

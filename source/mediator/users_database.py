@@ -28,12 +28,13 @@ class UsersDatabase(object):
             cursor = connection.cursor()
             cursor.execute(
                 "CREATE TABLE IF NOT EXISTS users\n"
-                "(password TEXT, "
-                "username TEXT UNIQUE, "
+                "(password TEXT NOT NULL, "
+                "username TEXT UNIQUE NOT NULL, "
                 "id INTEGER PRIMARY KEY)\n")
             connection.commit()
             connection.close()
-        except Exception:
+        except Exception as e:
+            print(e)
             logging.error("Database error:", exc_info=True)
 
     def add_user(self, username, password):
@@ -42,10 +43,13 @@ class UsersDatabase(object):
         :param username: The username of the user.
         :param password: The password of the user.
         """
-        self._cursor.execute(
-            "INSERT INTO users(username, password)\n"
-            "VALUES (?, ?)", (username, password))
-        self._connection.commit()
+        try:
+            self._cursor.execute(
+                "INSERT INTO users(username, password)\n"
+                "VALUES (?, ?)", (username, password))
+            self._connection.commit()
+        except sqlite3.IntegrityError:
+            raise ValueError("User already exists")
 
     def get_user(self, username, password):
         """

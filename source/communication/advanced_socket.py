@@ -10,21 +10,13 @@ from socket import socket as socket_object
 import threading
 import time
 import ssl
-import base64
-#from Cryptodome.PublicKey import RSA
-#f#rom Cryptodome import Random
 
-from Cryptodome.Hash import SHA256
-from Cryptodome.Cipher import PKCS1_OAEP
-from Cryptodome.PublicKey import RSA
-from Cryptodome import Random
 import lz4.frame
 
 from communication.message import (Message,
                                    MESSAGE_LENGTH_LENGTH,
                                    MESSAGE_TYPE_LENGTH,
-                                   ENCODING,
-                                   MESSAGE_TYPES)
+                                   ENCODING)
 from communication import message_buffer
 
 # The time in seconds that the sockets have to receive or send before
@@ -34,14 +26,10 @@ DEFAULT_REFRESH_RATE = 1
 DEFAULT_LENGTH_BUFFER_SIZE = 2**4
 DEFAULT_TYPE_BUFFER_SIZE = 2**2
 DEFAULT_CONTENT_BUFFER_SIZE = 2**16
-#RSA_MODULUS = 2**16
-#HASH_OUTPUT_SIZE = 928
-ENCRYPTION_BUFFER_SIZE = 190#RSA_MODULUS - 2 - 2*HASH_OUTPUT_SIZE
 hostname = 'main'
 context = ssl.create_default_context()
 context.check_hostname = False
 context.verify_mode = ssl.VerifyMode.CERT_NONE
-
 
 
 class ConnectionClosed(ConnectionError):
@@ -102,13 +90,14 @@ class AdvancedSocket(object):
         with self._recv_error_state_lock:
             return self.recv_error_state
 
-    def _pack_message(self, message):
+    @staticmethod
+    def _pack_message(message):
         """
         Pack a message object to bytes.
         :param: the message object
         :return: The message in bytes.
         """
-        packed_content = lz4.frame.compress(message.content)
+        packed_content = message.content #lz4.frame.compress(message.content)
         packet_header = (
             str(len(packed_content)).zfill(MESSAGE_LENGTH_LENGTH)
             + str(message.message_type).zfill(MESSAGE_TYPE_LENGTH))
@@ -126,9 +115,6 @@ class AdvancedSocket(object):
         :param address: The address to connect to like (ip, port)
         :return: A socket object
         """
-        #context = ssl.create_default_context()
-        #socket_obj = socket_object()
-        #socket = context.wrap_socket(socket_obj)
         socket = socket_object()
         socket.settimeout(DEFAULT_REFRESH_RATE)
         try:
@@ -182,8 +168,7 @@ class AdvancedSocket(object):
             except ssl.SSLWantWriteError:
                 pass
             except BlockingIOError:
-                print("BLOCKING!!!"*100)
-                raise
+                pass
             except socket_timeout:  # Raised by the socket after timeout
                 pass
             finally:
@@ -209,7 +194,7 @@ class AdvancedSocket(object):
         raw_content = self._recv_fixed_length_data(
             length,
             buffer_size)
-        return Message(message_type, lz4.frame.decompress(raw_content))
+        return Message(message_type, raw_content) #lz4.frame.decompress(raw_content))
 
     def _send_messages(self):
         """
@@ -231,7 +216,7 @@ class AdvancedSocket(object):
                 logging.debug("advanced_socket:Sending message: %s",
                               repr(message))
                 self._send_raw_data(
-                    self._pack_message(message))
+                    AdvancedSocket._pack_message(message))
         except ConnectionClosed:
             logging.debug("advanced_socket:Socket send thread closed normally")
         except ssl.SSLWantReadError:
@@ -376,7 +361,6 @@ class AdvancedSocket(object):
               socket,
               input_is_buffered,
               output_is_buffered,
-              refresh_rate=DEFAULT_REFRESH_RATE,
               buffer_size=DEFAULT_CONTENT_BUFFER_SIZE):
         """
         Start sending and receiving messages.
@@ -385,8 +369,6 @@ class AdvancedSocket(object):
                                   be buffered.
         :param output_is_buffered: Whether the messages sent should be
                                   buffered.
-        :param refresh_rate: The time between checks of whether the
-                             the socket or parts of it need to close.
         :param buffer_size: The size of the recv buffer.
         """
         self._socket = socket
@@ -461,7 +443,6 @@ class AdvancedSocket(object):
         """
         logging.debug("advanced_socket:Closing socket")
         if self._socket is not None:
-            #self._socket.shutdown(socket_object.SHUT_RDWR)
             self._socket.close()
         self._socket = None
         logging.debug("advanced_socket:Closed socket")

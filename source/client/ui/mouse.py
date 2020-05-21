@@ -3,8 +3,6 @@ A mouse
 """
 __author__ = "Ron Remets"
 
-import time
-
 from kivy.app import App
 from kivy.graphics import Rectangle, Color
 from kivy.uix.widget import Widget
@@ -50,10 +48,13 @@ class Mouse(Widget):
             Color(*MOUSE_INSIDE_COLOR)
             self.sprite_inside = Rectangle(pos=self.pos, size=self.size)
 
-        self.bind(pos=self.update_sprite)
-        self.bind(size=self.update_sprite)
+        self.bind(pos=self._update_sprite)
+        self.bind(size=self._update_sprite)
 
-    def update_sprite(self, *args):
+    def _update_sprite(self, *_):
+        """
+        Update the sprite of the mouse to the available position
+        """
         x, y = self.pos
         width, height = self.size
         inside_x = x + ((width - width * self.sprite_inside_percent) / 2)
@@ -91,10 +92,12 @@ class Mouse(Widget):
         return transformed_x, transformed_y
 
     def on_touch_down(self, touch):
-        print("MOUSE EXISTS")
+        """
+        On touch down, move the mouse to that location and send it pos
+        :param touch: The touch event object
+        """
         if not self.is_tracking:
             return super().on_touch_down(touch)
-        print("MOUSE WORKS")
         self.pos = touch.pos
         if touch.is_double_tap:
             action = "click"
@@ -118,6 +121,11 @@ class Mouse(Widget):
         self.pos = touch.pos
 
     def on_touch_up(self, touch):
+        """
+        on touch up, notify the server the mouse was released using the
+        correct action
+        :param touch: The touch event object
+        """
         if not self.is_tracking:
             return False
         self.pos = touch.pos

@@ -12,7 +12,6 @@ from kivy.properties import ObjectProperty, StringProperty, BooleanProperty
 from kivy.uix.image import Image
 
 from communication.message import Message, MESSAGE_TYPES
-from communication.advanced_socket import ConnectionClosed
 
 DEFAULT_IMAGE_FORMAT = "png"
 
@@ -51,7 +50,8 @@ class StreamedImage(Image):
             logging.debug("FRAME:Reloading screen")
             self.reload()
             logging.debug("FRAME:SCREEN UPDATED")
-        except Exception:  # TODO: dont be broad
+        except Exception as e:  # TODO: dont be broad
+            print(e)
             self.stop()
             logging.error("FRAME:An error occurred", exc_info=True)
             return
@@ -60,8 +60,9 @@ class StreamedImage(Image):
         """
         Start streaming.
         """
-        # TODO: https://buildmedia.readthedocs.org/media/pdf/kivy/latest/kivy.pdf
-        #  page 360
+        #  TODO:
+        #   https://buildmedia.readthedocs.org/media/pdf/kivy/latest/kivy.pdf
+        #   page 360
         # TODO: StreamedImage should not know about this variable
         if self._running:
             return

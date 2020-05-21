@@ -3,8 +3,6 @@ Streams the screen through a socket
 """
 __author__ = "Ron Remets"
 
-import logging
-
 from communication.message import Message, MESSAGE_TYPES
 from components.component import Component
 from components.screen_recorder import ScreenRecorder

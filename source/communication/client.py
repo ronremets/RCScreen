@@ -137,15 +137,6 @@ class Client(object):
         with self._connections_lock:
             return list(self._connections.values())
 
-    # def crash(self):
-    #     """
-    #     Close all the connections.
-    #     """
-    #     with self._connections_lock:
-    #         for connection in self._connections:
-    #             self.remove_connection(connection)
-    #             connection.close()
-
     def close_connection(self, connection):
         """
         You need the connector to be connected on another thread for
@@ -228,7 +219,8 @@ class Client(object):
             connection.status = ConnectionStatus.DISCONNECTING
         logging.debug(f"CONNECTIONS:Connector set {name} to disconnecting")
         # TODO: what if connector closes or server closes?
-        #while self.running and connector.status is ConnectionStatus.CONNECTED:
+        # while self.running and connector.status
+        # is ConnectionStatus.CONNECTED:
         while True:
             time.sleep(0)
             # TODO: what if status is error?
@@ -242,7 +234,8 @@ class Client(object):
             "finished"))
 
         # TODO: what if connector closes or server closes?
-        #while self.running and connector.status is ConnectionStatus.CONNECTED:
+        # while self.running and connector.status
+        # is ConnectionStatus.CONNECTED:
         while True:
             time.sleep(0)
             response = connector.socket.recv(block=False)
@@ -267,7 +260,8 @@ class Client(object):
             for connection in self.get_all_connections():
                 if connection.name != "connector":
                     self.connector_close_connection(connection.name, this_side)
-        except Exception:
+        except Exception as e:
+            print(e)
             logging.error("Error while disconnecting client", exc_info=True)
             logging.info(f"crashing client {self.user.username}")
             logging.info(f"client {self.user.username}'s connector is "
@@ -276,7 +270,8 @@ class Client(object):
             try:
                 while self.has_non_connector_connections():
                     time.sleep(0)
-            except Exception:
+            except Exception as e:
+                print(e)
                 logging.error("Error while crashing client",
                               exc_info=True)
 
@@ -308,7 +303,8 @@ class Client(object):
                      f"closing")
         try:
             connector.close()
-        except Exception:
+        except Exception as e:
+            print(e)
             logging.info((f"error while closing connector of "
                           + str(self.user.username)),
                          exc_info=True)

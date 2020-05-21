@@ -7,7 +7,6 @@ import threading
 import time
 import win32api
 import win32con
-import win32gui
 
 from components.component import Component
 
@@ -27,6 +26,10 @@ class MouseController(Component):
 
     @property
     def click_delay(self):
+        """
+        The time to wait between when a click touches down and up
+        :return: A floating point number in seconds
+        """
         with self._click_delay_lock:
             return self._click_delay
 

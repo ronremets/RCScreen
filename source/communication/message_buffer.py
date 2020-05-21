@@ -68,11 +68,6 @@ class MessageBuffer(object):
     def pop(self):
         """
         Get a message from the buffer.
-        :param timeout: If None, block until a message is available.
-                        If 0, return immediately a message or None if
-                        no messages available. Else, block for up to
-                        the specified seconds and return None if no
-                        items available.
         :return: The message and if there is not one, return None
         """
         with self._messages_lock:

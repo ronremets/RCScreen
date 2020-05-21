@@ -23,7 +23,7 @@ class KeyboardTracker(Widget):
         super().__init__(**kwargs)
         self._keyboard = None
 
-    def _on_keyboard_key_down(self, keyboard, keycode, text, modifiers):
+    def _on_keyboard_key_down(self, _, keycode, _2, modifiers):
         if not self.is_tracking:
             return False
         self.connection.socket.send(Message(
@@ -36,10 +36,9 @@ class KeyboardTracker(Widget):
         # the system.
         return True
 
-    def _on_keyboard_key_up(self, keyboard, keycode):
+    def _on_keyboard_key_up(self, _, keycode):
         """
-        When a key is pressed, send its keycode to the server
-        :param keyboard: The keyboard of the key.
+        When a key is pressed, send its keycode to the server.
         :param keycode: The string representation of the key.
         """
         if not self.is_tracking:

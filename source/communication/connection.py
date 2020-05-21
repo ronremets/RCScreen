@@ -86,7 +86,7 @@ class Connection(object):
         """
         logging.info(f"CONNECTIONS:Starting connection {self.name}")
         self._set_running(True)
-        #self.status = ConnectionStatus.CONNECTING
+        self.status = ConnectionStatus.CONNECTING
 
     def disconnect(self):
         """

@@ -11,6 +11,4 @@ import screen.signup_screen
 import screen.connect_screen
 import screen.controller_screen
 import screen.controlled_screen
-import screen.help_screen
-import screen.settings_screen
-import screen.feedback_screen
+import screen.server_finder_screen

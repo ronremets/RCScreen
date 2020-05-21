@@ -4,8 +4,6 @@ The controlled screen.
 
 __author__ = "Ron Remets"
 
-import threading
-import time
 import logging
 import win32api
 
@@ -13,7 +11,6 @@ from kivy.app import App
 from kivy.clock import Clock
 from kivy.uix.screenmanager import Screen
 from kivy.properties import ObjectProperty
-from kivy.core.window import Window
 
 from components.mouse_controller import MouseController
 from components.screen_streamer import ScreenStreamer
@@ -36,6 +33,10 @@ class ControlledScreen(Screen):
         self._app = App.get_running_app()
 
     def update_screen_size(self, size):
+        """
+        Update the size of the screen that the mouse is controlling
+        :param size: The size of the screen
+        """
         width, height = size
         self._app.screen_size = size
         if self.session_settings.running:
@@ -49,8 +50,10 @@ class ControlledScreen(Screen):
         :param connection_status: The connection status of the
                                   connection used to by the mouse
         """
-        self.mouse_controller.start(
-            self._app.connection_manager.client.get_connection("mouse tracker"))
+        if connection_status == "ready":
+            self.mouse_controller.start(
+                self._app.connection_manager.client.get_connection(
+                    "mouse tracker"))
 
     def _start_screen_streamer(self, connection_status):
         """
@@ -58,13 +61,16 @@ class ControlledScreen(Screen):
         :param connection_status: The connection status of the
                                   connection used to stream
         """
-        #self.screen_streamer.screen_recorder.image_format = self._app.screen_image_format
-        self.screen_streamer.start(
-            self._app.connection_manager.client.get_connection("screen recorder"))
+        if connection_status == "ready":
+            self.screen_streamer.start(
+                self._app.connection_manager.client.get_connection(
+                    "screen recorder"))
 
     def _start_keyboard(self, connection_status):
-        self.keyboard_controller.start(
-            self._app.connection_manager.client.get_connection("keyboard tracker"))
+        if connection_status == "ready":
+            self.keyboard_controller.start(
+                self._app.connection_manager.client.get_connection(
+                    "keyboard tracker"))
 
     def _handle_settings_connection_status(self, connection_status):
         logging.debug(
@@ -87,7 +93,8 @@ class ControlledScreen(Screen):
         logging.debug(
             f"MAIN:Screen connection status: {connection_status}")
         # TODO: Handle errors
-        Clock.schedule_once(lambda _: self._start_screen())
+        if connection_status == "ready":
+            Clock.schedule_once(lambda _: self._start_screen())
 
     def on_enter(self, *args):
         """
@@ -142,6 +149,7 @@ class ControlledScreen(Screen):
             try:
                 # TODO: change kill to False
                 self._app.connection_manager.close_connection(connection_name)
-            except Exception:
+            except Exception as e:
+                print(e)
                 logging.error(f"CONTROLLED SCREEN:Error while closing"
                               f" {connection_name}", exc_info=True)

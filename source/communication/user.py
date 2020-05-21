@@ -1,7 +1,6 @@
 """
 A user
 """
-
 __author__ = "Ron Remets"
 
 

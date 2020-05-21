@@ -1,29 +1,60 @@
 <DynamicButton@Button>:
-    font_size: self.height / 2
-    texture_size: self.width / 2, self.height / 2
+    font_size: self.height
+    texture_size: self.width * 0.9, self.height * 0.9
     on_texture_size:
-        self.font_size = self.height / 2
-        self.texture_size = self.width / 2, self.height / 2
+        self.font_size = self.height
+        self.texture_size = self.width * 0.9, self.height * 0.9
 
 
 <DynamicLabel@Label>:
-    font_size: self.height / 2
-    texture_size: self.width / 2, self.height / 2
+    font_size: self.height
+    texture_size: self.width * 0.9, self.height * 0.9
     on_texture_size:
-        self.font_size = self.height / 2
-        self.texture_size = self.width / 2, self.height / 2
+        self.font_size = self.height
+        self.texture_size = self.width * 0.9, self.height * 0.9
 
 
 WindowManager:
+    ServerFinderScreen:
     LoginScreen:
     SignupScreen:
     MainMenuScreen:
-    SettingsScreen:
-    HelpScreen:
-    FeedbackScreen:
     ConnectScreen:
     ControllerScreen:
     ControlledScreen:
+
+<ServerFinderScreen>:
+    name: "server finder"
+    GridLayout:
+        size: self.size
+        pos: self.pos
+        rows: 3
+        cols: 2
+        padding:
+            ((self.width / self.cols) * 0.25,
+            (self.height / self.rows) * 0.2)
+        spacing: (self.height / self.rows) * 0.2
+
+        DynamicLabel:
+            text: "Server IP"
+
+        TextInput:
+            id: ip_text_input
+            hint_text: "IP"
+            text: "127.0.0.1"
+
+        DynamicLabel:
+            text: "Server port"
+
+        TextInput:
+            id: port_text_input
+            hint_text: "Port"
+            text: "2125"
+
+        DynamicButton:
+            text: "Login"
+            on_press:
+                root._start_connection_manager(ip_text_input.text, port_text_input.text)
 
 <LoginScreen>:
     username_text_input: username_text_input
@@ -44,6 +75,7 @@ WindowManager:
 
         TextInput:
             id: username_text_input
+            hint_text: "username"
             text: "meme"
 
         DynamicLabel:
@@ -51,6 +83,7 @@ WindowManager:
 
         TextInput:
             id: password_text_input
+            hint_text: "password"
             text: "meme_is_good"
 
         DynamicButton:
@@ -150,7 +183,7 @@ WindowManager:
     name: "main"
     GridLayout:
         size: root.size
-        rows: 5
+        rows: 2
         cols: 1
         padding:
             ((self.width / self.cols) * 0.25,
@@ -166,176 +199,24 @@ WindowManager:
                 root.manager.transition.direction = "left"
                 app.root.current = "connect"
 
-        DynamicButton:
-            text: "Settings"
-            on_press:
-                root.manager.transition.direction = "left"
-                app.root.current = "settings"
-
-        DynamicButton:
-            text: "Help"
-            on_press:
-                root.manager.transition.direction = "left"
-                app.root.current = "help"
-
-        DynamicButton:
-            text: "Feedback"
-            on_press:
-                root.manager.transition.direction = "left"
-                app.root.current = "feedback"
-
-
-<HelpScreen>
-    name: "help"
-    GridLayout:
-        size: root.size
-        rows: 2
-        cols: 1
-        padding:
-            ((self.width / self.cols) * 0.25,
-            (self.height / self.rows) * 0.2)
-        spacing: (self.height / self.rows) * 0.2
-    
-        DynamicLabel:
-            text: "help screen"
-
-        DynamicButton:
-            text: "Back"
-            on_press:
-                root.manager.transition.direction = "right"
-                app.root.current = "main"
-
-
-<SettingsScreen>
-    name: "settings"
-    GridLayout:
-        size: root.size
-        rows: 2
-        cols: 1
-        padding:
-            ((self.width / self.cols) * 0.25,
-            (self.height / self.rows) * 0.2)
-        spacing: (self.height / self.rows) * 0.2
-    
-        DynamicLabel:
-            text: "settings screen"
-
-        DynamicButton:
-            text: "Back"
-            on_press:
-                root.manager.transition.direction = "right"
-                app.root.current = "main"
-
-
-<FeedbackScreen>
-    name: "feedback"
-    GridLayout:
-        size: root.size
-        rows: 5
-        cols: 2
-        padding:
-            ((self.width / self.cols) * 0.25,
-            (self.height / self.rows) * 0.2)
-        spacing: (self.height / self.rows) * 0.2
-    
-        DynamicButton:
-            text: "Back"
-            on_press:
-                root.manager.transition.direction = "right"
-                app.root.current = "main"
-
-        Label:
-
-        DynamicLabel:
-            text: "Enter Email:"
-
-        TextInput:
-
-        DynamicLabel:
-            text: "Enter subject:"
-
-        TextInput:
-
-        DynamicLabel:
-            text: "Enter description:"
-
-        TextInput:
-
-        Label:
-
-        DynamicButton:
-            text: "Submit"
-
 
 <ErrorPopup>:
-    GridLayout:
+    content_label: content_label
+    title: "Error"
+    RelativeLayout:
         size: root.size
         pos: root.pos
-        rows: 3
-        cols: 2
-        padding:
-            ((self.width / self.cols) * 0.25,
-            (self.height / self.rows) * 0.2)
-        spacing: (self.height / self.rows) * 0.2
-    
         DynamicLabel:
-            text: "error popup"
+            id: content_label
+            pos: 0, root.height - self.height
+            size_hint: 1, 0.8
+            text: "Unknown error occurred"
 
         DynamicButton:
-            text: "Back"
-            on_press:
-                self.text = "pressed"
-
-
-#<Controller>:
-#    DynamicButton:
-#        text: "Left click"
-#        size_hint: 0.25, 1 / 3
-#        pos:
-#            (self.width,
-#            0.5 * root.height - self.height / 2)
-#        on_press: root.left_button_clicked()
-#
-#    DynamicButton:
-#        text: "Right click"
-#        size_hint: 0.25, 1 / 3
-#        pos:
-#            (2 * self.width,
-#            0.5 * root.height - self.height / 2)
-#        on_press: root.right_button_clicked()
-#
-#    DynamicButton:
-#        text: "<"
-#        size_hint: 0.25, 1 / 3
-#        pos: (0, 0.5 * root.height - self.height / 2)
-#        on_press: root.move_left()
-#
-#    DynamicButton:
-#        text: ">"
-#        size_hint: 0.25, 1 / 3
-#        pos:
-#            (root.width - self.width,
-#            0.5 * root.height - self.height / 2)
-#        on_press: root.move_right()
-#
-#    DynamicButton:
-#        text: "^"
-#        size_hint: 0.25, 1 / 3
-#        pos:
-#            (0.5 * root.width - self.width / 2,
-#            root.height - self.height)
-#        on_press: root.move_up()
-#
-#    DynamicButton:
-#        text: "v"
-#        size_hint: 0.25, 1 / 3
-#        pos: (0.5 * root.width - self.width / 2, 0)
-#        on_press: root.move_down()
-
-
-#<StreamedController>:
-#    x_sensitivity: app.x_sensitivity
-#    y_sensitivity: app.y_sensitivity
+            pos: (root.width - self.width) * 0.5, 0
+            size_hint: 0.5, 0.2
+            text: "OK"
+            on_press: root.dismiss()
 
 
 <ControllerScreen>
@@ -372,12 +253,6 @@ WindowManager:
         on_press:
             root.manager.transition.direction = "right"
             app.root.current = "connect"
-
-
-    #StreamedController:
-    #    id: controller
-    #    size_hint: 0.5, 0.5
-    #    pos: root.width - self.width, 0
 
 
 <ControlledScreen>

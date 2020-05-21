@@ -5,7 +5,7 @@ __author__ = "Ron Remets"
 
 import queue
 
-from kivy.clock import Clock, mainthread
+from kivy.clock import mainthread
 from kivy.app import App
 
 from component import Component
