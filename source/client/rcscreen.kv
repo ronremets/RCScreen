@@ -18,7 +18,6 @@ WindowManager:
     ServerFinderScreen:
     LoginScreen:
     SignupScreen:
-    MainMenuScreen:
     ConnectScreen:
     ControllerScreen:
     ControlledScreen:
@@ -41,7 +40,6 @@ WindowManager:
         TextInput:
             id: ip_text_input
             hint_text: "IP"
-            text: "127.0.0.1"
 
         DynamicLabel:
             text: "Server port"
@@ -49,7 +47,6 @@ WindowManager:
         TextInput:
             id: port_text_input
             hint_text: "Port"
-            text: "2125"
 
         DynamicButton:
             text: "Login"
@@ -76,7 +73,6 @@ WindowManager:
         TextInput:
             id: username_text_input
             hint_text: "username"
-            text: "meme"
 
         DynamicLabel:
             text: "Password:"
@@ -84,7 +80,6 @@ WindowManager:
         TextInput:
             id: password_text_input
             hint_text: "password"
-            text: "meme_is_good"
 
         DynamicButton:
             text: "Login"
@@ -117,14 +112,14 @@ WindowManager:
 
         TextInput:
             id: username_text_input
-            text: "meme"
+            hint_text: "username"
 
         DynamicLabel:
             text: "Password:"
 
         TextInput:
             id: password_text_input
-            text: "meme_is_good"
+            hint_text: "password"
 
         DynamicButton:
             id: signup_button
@@ -161,43 +156,18 @@ WindowManager:
             id: partner_label
             text: app.partner
 
+        Label:
+
         DynamicButton:
             text: "Connect"
             on_press:
                 root.connect()
-
-        DynamicButton:
-            text: "Back"
-            on_press:
-                root.manager.transition.direction = "right"
-                app.root.current = "main"
 
         DynamicLabel:
             text: "Controller:"
 
         CheckBox:
             id: controller_checkbox
-
-
-<MainMenuScreen>:
-    name: "main"
-    GridLayout:
-        size: root.size
-        rows: 2
-        cols: 1
-        padding:
-            ((self.width / self.cols) * 0.25,
-            (self.height / self.rows) * 0.2)
-        spacing: (self.height / self.rows) * 0.2
-
-        DynamicLabel:
-            text: "RCScreen"
-
-        DynamicButton:
-            text: "Connect"
-            on_press:
-                root.manager.transition.direction = "left"
-                app.root.current = "connect"
 
 
 <ErrorPopup>:
@@ -223,7 +193,6 @@ WindowManager:
     mouse: mouse
     screen: screen
     keyboard_tracker: keyboard_tracker
-    #controller: controller
     name: "controller"
 
     KeyboardTracker:

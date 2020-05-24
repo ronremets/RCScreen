@@ -11,7 +11,7 @@ import threading
 import time
 import ssl
 
-import lz4.frame
+# import lz4.frame
 
 from communication.message import (Message,
                                    MESSAGE_LENGTH_LENGTH,
@@ -97,7 +97,8 @@ class AdvancedSocket(object):
         :param: the message object
         :return: The message in bytes.
         """
-        packed_content = message.content #lz4.frame.compress(message.content)
+        # lz4.frame.compress(message.content)
+        packed_content = message.content
         packet_header = (
             str(len(packed_content)).zfill(MESSAGE_LENGTH_LENGTH)
             + str(message.message_type).zfill(MESSAGE_TYPE_LENGTH))
@@ -194,7 +195,8 @@ class AdvancedSocket(object):
         raw_content = self._recv_fixed_length_data(
             length,
             buffer_size)
-        return Message(message_type, raw_content) #lz4.frame.decompress(raw_content))
+        # lz4.frame.decompress(raw_content))
+        return Message(message_type, raw_content)
 
     def _send_messages(self):
         """

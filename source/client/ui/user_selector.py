@@ -138,7 +138,6 @@ class UserSelector(Button):
         if self.is_active:
             Logger.debug("User selector:Opening dropdown")
             self.users_dropdown.open(self)
-            print(self.users_dropdown.children)
         else:
             Logger.debug("User selector:Did not open dropdown "
                          "since it is closed or had not started")
@@ -160,7 +159,6 @@ class UserSelector(Button):
         Only call this after opening
         """
         Logger.info("User selector:Closing")
-        # self._app.unbind(partner) TODO: unbind this
         self.is_active = False
         if self._update_event is not None:
             self._update_event.cancel()

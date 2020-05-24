@@ -26,7 +26,7 @@ class RCScreenApp(App):
     username = StringProperty("")
     password = StringProperty("")
     # TODO: can connect_screen handle this?
-    is_controller = BooleanProperty(False)
+    is_controller = BooleanProperty(True)
     # TODO: can connect_screen handle this?
     partner = StringProperty("")
     connection_manager = ObjectProperty(ConnectionManager())

@@ -8,7 +8,7 @@ import queue
 from kivy.clock import mainthread
 from kivy.app import App
 
-from component import Component
+from components.component import Component
 
 
 class SessionSettings(Component):

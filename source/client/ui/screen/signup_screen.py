@@ -42,7 +42,7 @@ class SignupScreen(Screen):
         if response == "ready":
             logging.info("MAIN:Created main, switching to main menu")
             self.manager.transition.direction = "up"
-            self.app.root.current = "main"
+            self.app.root.current = "connect"
         else:
             self._display_error_popup(response)
 
