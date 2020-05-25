@@ -9,7 +9,7 @@ from socket import timeout as socket_timeout
 from socket import socket as socket_object
 import threading
 import time
-import ssl
+# import ssl
 
 # import lz4.frame
 
@@ -21,15 +21,15 @@ from communication import message_buffer
 
 # The time in seconds that the sockets have to receive or send before
 # they check if they have to close.
-DEFAULT_REFRESH_RATE = 1
+DEFAULT_REFRESH_RATE = 3
 # The buffer size used when receiving.
 DEFAULT_LENGTH_BUFFER_SIZE = 2**4
 DEFAULT_TYPE_BUFFER_SIZE = 2**2
 DEFAULT_CONTENT_BUFFER_SIZE = 2**16
 hostname = 'main'
-context = ssl.create_default_context()
-context.check_hostname = False
-context.verify_mode = ssl.VerifyMode.CERT_NONE
+# context = ssl.create_default_context()
+# context.check_hostname = False
+# context.verify_mode = ssl.VerifyMode.CERT_NONE
 
 
 class ConnectionClosed(ConnectionError):
@@ -98,7 +98,7 @@ class AdvancedSocket(object):
         :return: The message in bytes.
         """
         # lz4.frame.compress(message.content)
-        packed_content = message.content
+        packed_content = message.content  # lz4.frame.compress(message.content)
         packet_header = (
             str(len(packed_content)).zfill(MESSAGE_LENGTH_LENGTH)
             + str(message.message_type).zfill(MESSAGE_TYPE_LENGTH))
@@ -123,7 +123,7 @@ class AdvancedSocket(object):
         except Exception:
             socket.close()
             raise
-        return context.wrap_socket(socket, server_hostname=hostname)
+        return socket  # context.wrap_socket(socket, server_hostname=hostname)
 
     def _send_raw_data(self, data):
         """
@@ -135,10 +135,16 @@ class AdvancedSocket(object):
         total_bytes_sent = 0
         while total_bytes_sent < len(data):
             try:
-                bytes_sent = self._socket.write(data[total_bytes_sent:])
+                bytes_sent = self._socket.send(data[total_bytes_sent:])
                 if bytes_sent == 0:
                     raise RuntimeError("socket connection broken")
                 total_bytes_sent += bytes_sent
+            # except ssl.SSLWantReadError:
+            #     pass
+            # except ssl.SSLWantWriteError:
+            #     pass
+            except BlockingIOError:
+                pass
             except socket_timeout:  # Raised by the socket after timeout
                 pass
             finally:
@@ -159,15 +165,17 @@ class AdvancedSocket(object):
         bytes_received = 0
         while bytes_received < length:
             try:
-                data_chunk = self._socket.read(
+                data_chunk = self._socket.recv(
                     min(length - bytes_received, buffer_size))
                 chunk_length = len(data_chunk)
                 if data_chunk == b"":
                     raise RuntimeError("socket connection broken")
                 data[bytes_received:bytes_received + chunk_length] = data_chunk
                 bytes_received += chunk_length
-            except ssl.SSLWantWriteError:
-                pass
+            # except ssl.SSLWantReadError:
+            #     pass
+            # except ssl.SSLWantWriteError:
+            #     pass
             except BlockingIOError:
                 pass
             except socket_timeout:  # Raised by the socket after timeout
@@ -221,10 +229,6 @@ class AdvancedSocket(object):
                     AdvancedSocket._pack_message(message))
         except ConnectionClosed:
             logging.debug("advanced_socket:Socket send thread closed normally")
-        except ssl.SSLWantReadError:
-            pass
-        except BlockingIOError:
-            print("send is blocking"*100)
         except Exception as e:
             logging.error(
                 "advanced_socket:Socket send thread crashed with error:",

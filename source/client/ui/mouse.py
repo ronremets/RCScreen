@@ -13,6 +13,7 @@ from kivy.properties import (ObjectProperty,
                              OptionProperty)
 
 from communication.message import Message, MESSAGE_TYPES
+from popup.error_popup import ErrorPopup
 
 DEFAULT_BUTTON_TYPE = "left"
 DEFAULT_CLICK_TYPE = "move"
@@ -25,13 +26,15 @@ class Mouse(Widget):
     """
     A mouse
     """
+    click_button_spinner = ObjectProperty()
+    click_type_spinner = ObjectProperty()
     # Decides which button the double tap activates
     button_type = OptionProperty(DEFAULT_BUTTON_TYPE,
                                  options=["left", "right"])
     # Decides Whether taps and move press the mouse or move them.
     # Double tap always clicks the mouse
     click_type = OptionProperty(DEFAULT_CLICK_TYPE,
-                                options=["move", "click"])
+                                options=["move", "hold"])
     connection = ObjectProperty()
     is_tracking = BooleanProperty(False)
     sprite_inside_percent = NumericProperty(
@@ -96,19 +99,29 @@ class Mouse(Widget):
         On touch down, move the mouse to that location and send it pos
         :param touch: The touch event object
         """
-        if not self.is_tracking:
+        if (not self.is_tracking
+                or self.click_button_spinner.collide_point(*touch.pos)
+                or self.click_type_spinner.collide_point(*touch.pos)):
             return super().on_touch_down(touch)
-        self.pos = touch.pos
-        if touch.is_double_tap:
-            action = "click"
-        elif self.click_type == "move":
-            action = "move"
-        else:
-            action = "press"
-        x, y = self._transform_pos(touch.pos)
-        self.connection.socket.send(Message(
-            MESSAGE_TYPES["controller"],
-            f"{action} {self.button_type} {x},{y}"))
+        try:
+            self.pos = touch.pos
+            if touch.is_double_tap:
+                action = "click"
+            elif self.click_type == "move":
+                action = "move"
+            else:
+                action = "press"
+            x, y = self._transform_pos(touch.pos)
+
+            self.connection.socket.send(Message(
+                MESSAGE_TYPES["controller"],
+                f"{action} {self.button_type} {x},{y}"))
+        except Exception as e:
+            print(e)
+            self.is_tracking = False
+            error_popup = ErrorPopup()
+            error_popup.content_label.text = "Mouse crashed"
+            error_popup.open()
         return super().on_touch_down(touch)
 
     def on_touch_move(self, touch):
@@ -116,7 +129,9 @@ class Mouse(Widget):
         Happens every frame while touch is down
         :param touch: The touch object
         """
-        if not self.is_tracking:
+        if (not self.is_tracking
+                or self.click_button_spinner.collide_point(*touch.pos)
+                or self.click_type_spinner.collide_point(*touch.pos)):
             return False
         self.pos = touch.pos
 
@@ -126,14 +141,24 @@ class Mouse(Widget):
         correct action
         :param touch: The touch event object
         """
-        if not self.is_tracking:
+        if (not self.is_tracking
+                or self.click_button_spinner.collide_point(*touch.pos)
+                or self.click_type_spinner.collide_point(*touch.pos)):
             return False
-        self.pos = touch.pos
-        if self.click_type == "move":
-            action = "move"
-        else:
-            action = "release"
-        x, y = self._transform_pos(touch.pos)
-        self.connection.socket.send(Message(
-            MESSAGE_TYPES["controller"],
-            f"{action} {self.button_type} {x},{y}"))
+        try:
+            self.pos = touch.pos
+            if self.click_type == "move":
+                action = "move"
+            else:
+                action = "release"
+            x, y = self._transform_pos(touch.pos)
+
+            self.connection.socket.send(Message(
+                MESSAGE_TYPES["controller"],
+                f"{action} {self.button_type} {x},{y}"))
+        except Exception as e:
+            print(e)
+            self.is_tracking = False
+            error_popup = ErrorPopup()
+            error_popup.content_label.text = "Mouse crashed"
+            error_popup.open()

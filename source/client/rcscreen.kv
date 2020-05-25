@@ -238,20 +238,35 @@ WindowManager:
             app.root.current = "connect"
 
 <Mouse>:
+    click_button_spinner: click_button_spinner
+    click_type_spinner: click_type_spinner
     GridLayout:
         rows: 1
         cols: 2
         pos_hint: 0.6, 0.8
         size_hint: 0.2, 0.2
         Spinner:
+            id: click_button_spinner
             size_hint: None, None
             text: 'left'
             values: 'left', 'right'
+            font_size: self.height
+            texture_size: self.width * 0.9, self.height * 0.9
+            on_texture_size:
+                self.font_size = self.height
+                self.texture_size = self.width * 0.9, self.height * 0.9
             on_text:
                 root.button_type = self.text
+
         Spinner:
+            id: click_type_spinner
             size_hint: None, None
             text: 'move'
-            values: 'move', 'click'
+            values: 'move', 'hold'
+            font_size: self.height
+            texture_size: self.width * 0.9, self.height * 0.9
+            on_texture_size:
+                self.font_size = self.height
+                self.texture_size = self.width * 0.9, self.height * 0.9
             on_text:
                 root.click_type = self.text

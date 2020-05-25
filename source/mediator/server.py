@@ -10,7 +10,7 @@ import logging
 import socket
 import threading
 import time
-import ssl
+# import ssl
 import queue
 
 from communication.message_buffer import MessageBuffer
@@ -30,10 +30,10 @@ DEFAULT_SERVER_ADDRESS = ("0.0.0.0", 2125)
 #  set it
 DEFAULT_REFRESH_RATE = 2
 DEFAULT_DB_FILENAME = 'users.db'
-context = ssl.create_default_context()
-context.check_hostname = False
-context.verify_mode = ssl.VerifyMode.CERT_NONE
-context.load_cert_chain('./cert/server.pem', './cert/server.key')
+# context = ssl.create_default_context()
+# context.check_hostname = False
+# context.verify_mode = ssl.VerifyMode.CERT_NONE
+# context.load_cert_chain('./cert/server.pem', './cert/server.key')
 
 
 class DisconnectReason(enum.Enum):
@@ -945,11 +945,11 @@ class Server(object):
                 connection_socket, address = self._server_socket.accept()
                 connection_socket.settimeout(
                     advanced_socket.DEFAULT_REFRESH_RATE)
-                secure_connection = context.wrap_socket(
-                    connection_socket,
-                    server_side=True)
-            except ssl.SSLError:
-                logging.error("ACCEPT:SSL error:", exc_info=True)
+                # secure_connection = context.wrap_socket(
+                #    connection_socket,
+                #    server_side=True)
+            # except ssl.SSLError:
+            #    logging.error("ACCEPT:SSL error:", exc_info=True)
             except socket.timeout:
                 pass
             else:
@@ -957,7 +957,7 @@ class Server(object):
                 threading.Thread(
                     name=f"Accept {address} thread",
                     target=self._run_connection,
-                    args=(secure_connection, address)).start()
+                    args=(connection_socket, address)).start()
         logging.info("ACCEPT:closing server socket")
         try:
             self._server_socket.close()

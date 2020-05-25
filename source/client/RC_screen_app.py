@@ -16,6 +16,7 @@ import ui
 from connection_manager import ConnectionManager
 
 DEFAULT_SCREEN_IMAGE_FORMAT = "png"
+ICON_PATH = "icon.ico"
 
 
 class RCScreenApp(App):
@@ -42,3 +43,13 @@ class RCScreenApp(App):
         """
         if self.connection_manager.running:
             self.connection_manager.close()
+
+    def build(self):
+        """
+        when the app is created
+        """
+        try:
+            self.icon = ICON_PATH
+        except Exception as e:
+            print(e)
+        return super().build()
